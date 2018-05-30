@@ -35,7 +35,7 @@
 
 '''
 This is a simple RTMFP rendezvous server to enable end-to-end and client-server UDP based media transport between Flash Player instances
-and with this server. 
+and with this server.
 
 Protocol Description
 --------------------
@@ -95,7 +95,7 @@ The padding is a sequence of zero or more bytes where each byte is \xff. Since i
 decrypted part is a multiple of 16. Thus, the size of padding is always less than 16 bytes and is calculated as follows:
 
   len(padding) = 16*N - len(network-layer-data) - 1
-  where N is any positive number to make 0 <= padding-size < 16 
+  where N is any positive number to make 0 <= padding-size < 16
 
 For example, if network-layer-data is 84 bytes, then padding is 16*6-84-1=11 bytes. Adding a padding of 11 bytes makes the decrypted raw-part of size 96 which
 is a multiple of 16 (bytes) hence works with AES with 128-bit key.
@@ -150,7 +150,7 @@ system to calculate the round-trip-time (RTT) and keep it up-to-date.
 
 Each chunk starts with an 8-bit type, followed by the 16-bit size of payload, followed by the payload of size bytes. Note that \xff is reserved and not used for
 chunk-type. This is useful in detecting when the network-layer-data has finished and padding has started because padding uses \xff. Alternatively, \x00 can also
-be used for padding as that is reserved type too! 
+be used for padding as that is reserved type too!
 
   chunk = type | size | payload
 
@@ -170,7 +170,7 @@ A new session starts with an handshake of the session setup. Under normal client
 
 Under peer-to-peer session setup case for NAT traversal, the server acts as a forwarder and forwards the hello to another connected client as follows:
 
- initiator (client)                forwarder (server)                     target (client) 
+ initiator (client)                forwarder (server)                     target (client)
     |-------initiator hello---------->|                                       |
     |                                 |---------- forwarded initiator hello-->|
     |                                 |<--------- ack ----------------------->|
@@ -178,9 +178,9 @@ Under peer-to-peer session setup case for NAT traversal, the server acts as a fo
 
 Alternatively, the server could redirect to another target by supplying an alternative list of target addresses as follows:
 
- initiator (client)                redirector (server)                     target (client) 
-    |-------initiator hello---------->|                                   
-    |<------responder redirect--------| 
+ initiator (client)                redirector (server)                     target (client)
+    |-------initiator hello---------->|
+    |<------responder redirect--------|
     |-------------initiator hello-------------------------------------------->|
     |<------------responder hello---------------------------------------------|
 
@@ -427,7 +427,7 @@ Fill in description of the remaining message flows beyond handshake.
 Describe the man-in-middle mode that enables audio/video flowing through the server.
 '''
 
-import os, sys, traceback, urlparse, re, socket, struct, time, random, hmac, hashlib
+import sys, traceback, urlparse, re, socket, struct, time, random, hmac, hashlib
 import multitask, amf, rtmp
 
 try:
@@ -452,13 +452,13 @@ try:
 except ImportError:
     print 'WARNING: Please install PyCrypto in your PYTHONPATH for faster performance. Falling back to Python aes.py which is *very* slow'
     import aes
-    
+
     class AESEncrypt(object):
         def __init__(self, key):
             self.key = key[:16]
         def encode(self, data):
             return aes.encrypt(self.key, data, iv=aes.iv_null())
-        
+
     class AESDecrypt(object):
         def __init__(self, key):
             self.key = key[:16]
@@ -475,12 +475,12 @@ _debug = False
 def _isLocal(value):
     '''Check whether the supplied address tuple ("dotted-ip", port) is local loopback or not?'''
     return value[0] == '127.0.0.1'
-    
+
 def _str2address(value, hasPort=True):
     '''Parse the given IPv4 or IPv6 address in to ("dotted-ip", port). If port is False, do not parse port, and return it as 0.
     @param value the binary string representing ip (if hasPort is False) or ip plus port (if hasPort is True).
     @param hasPort if False, then value must not have port. It returns port as 0.
-    
+
     >>> print _str2address('\x7f\x00\x00\x01\x00\x80')
     ('127.0.0.1', 128)
     '''
@@ -497,12 +497,12 @@ def _str2address(value, hasPort=True):
         return (':'.join(['%X'%((ord(x) << 8 | ord(y)),) for x, y in zip(ip[::2], ip[1::2])]), port)
     else:
         raise ValueError('invalid length of IP value ' + len(value))
-                           
+
 def _address2str(value, hasPort=True):
     '''Represent the given ("dotted-ip", port) in to binary string.
     @param value the tuple of length 2 of the form ('dotted-ip', port)
     @param hasPort if False, do not represent port in the returned string. The value must always have port.
-    
+
     >>> print _address2str(('127.0.0.1', 128))
     \x7f\x00\x00\x01\x00\x80
     '''
@@ -518,7 +518,7 @@ def _address2str(value, hasPort=True):
             raise ValueError('invalid dotted-ipv6')
         ip = ''.join([struct.pack('>H', int(x, 16)) for x in parts])
     return (ip + struct.pack('>H', port)) if hasPort else ip
-    
+
 def _ipport2address(value):
     '''Parse a string of the form "dotted-ip:port" to ("dotted-ip", port).'''
     ip, ignore, port = value.rpartition(':')
@@ -526,7 +526,7 @@ def _ipport2address(value):
 
 def _address2ipport(address, default_port=1935):
     return address[0] if address[1] in (0, default_port) else '%s:%d'%(address[0], address[1])
-    
+
 def _sizeLength7(value):
     '''Return the length of storing value using 7 bits variable integer.'''
     return 4 if value >= 0x200000 else 3 if value >= 0x4000 else 2 if value >= 0x80 else 1
@@ -610,7 +610,7 @@ def _beginDH():
     '''Using known p (1024bit prime) and g=2, return (x, y) where x=random private value, y=g^x mod p public value.'''
     g, x = 2, _bin2int(_random(128))
     return (x, pow(g, x, _dh1024p))
-    
+
 def _endDH(x, y):
     '''Using known p (1024bit prime), return secret=y^x mod p where x=random private value, y=other sides' public value.'''
     return pow(y, x, _dh1024p)
@@ -632,7 +632,7 @@ class Entity(object):
         return hash(self.id)
     def __repr__(self):
         return '<%s id=%s/>'%(self.__class__.__name__, self.id and truncate(self.id))
-        
+
 class Client(Entity):
     def __init__(self):
         Entity.__init__(self)
@@ -642,7 +642,7 @@ class Client(Entity):
 
 class Peer(Client):
     '''A single peer representation.
-    
+
     @ivar address (tuple) the address of the form ('ip', port) where ip is dotted-string and port is int.
     @ivar privateAddress (list) the list of ('ip', port).
     @ivar state (str) one of 'none', 'accepted', 'rejected'.
@@ -653,30 +653,30 @@ class Peer(Client):
     def __init__(self): # initialize the peer
         Client.__init__(self)
         self.address, self._privateAddress, self._ping, self.state, self.groups = None, [], 0, Peer.NONE, []
-        
+
     def __repr__(self):
         return '<%s id=%s swfUrl=%r pageUrl=%r path=%r address=%r privateAddress=%r state=%r/>'%(self.__class__.__name__, self.id and truncate(self.id), self.swfUrl, self.pageUrl, self.path, self.address, self._privateAddress, self.state)
-        
+
     def close(self): # unsubscribe groups when closing this peer
         for group in self.groups:
             group.peers.remove(self)
         self.groups[:] = []
-    
+
     def dup(self):
         peer = Peer()
         peer.id, peer.swfUrl, peer.pageUrl, peer.path, peer.data = self.id, self.swfUrl, self.pageUrl, self.path, self.data # Entity, Client
         peer.address, peer._privateAddress, peer._ping, peer.state = self.address, self._privateAddress[:], self._ping, self.state # Peer
         return peer
-    
+
     def _getPing(self):
         return self._ping
     def _setPing(self, value):
-        oldValue, self._ping = self._ping, value
+        self._ping = value
         for group in self.groups:
             group.peers.remove(self) # re-add so that sorted by ping time
             group.peers.add(self)
     ping = property(fget=_getPing, fset=_setPing)
-    
+
     def _getPrivateAddress(self):
         return self._privateAddress
     def _setPrivateAddress(self, value):
@@ -726,7 +726,7 @@ class Target(Entity):
             cookie.nonce = cookie.nonce[:9] + '\x1d' + cookie.nonce[10:]
             self.id = hashlib.sha256(cookie.nonce[7:]).digest()
             cookie.nonce = cookie.nonce[:9] + '\x0d' + cookie.nonce[10:]
-            
+
     def close(self):
         pass
         #if self.DH: # why do we need to call _endDH() ?
@@ -745,7 +745,7 @@ class Cookie(object):
             self.DH = _beginDH()
             if _debug: print '   create cookie with queryUrl %r'%(value,)
             self.nonce = '\x03\x1A\x00\x00\x02\x1E\x00\x81\x02\x0D\x02' + _int2bin(self.DH[1], 128) # len is 11+key
-                
+
     def close(self):
         #if not self.target and self.DH:
         #    _endDH(self.DH)
@@ -754,7 +754,7 @@ class Cookie(object):
     @property
     def obsolete(self):
         return (time.time() - self.createdTs) >= 120 # two minutes elapsed
-    
+
     def computeKeys(self, initKey, initNonce): # returns (dkey, ekey)
         assert len(initKey) == 128
         sharedSecret = _int2bin(_endDH(self.DH[0], _bin2int(initKey)), len(initKey))
@@ -766,7 +766,7 @@ class Cookie(object):
 
     def __repr__(self):
         return '<Cookie id=%r queryUrl=%r nonce=%s />'%(self.id, self.queryUrl, truncate(self.nonce))
-        
+
     def __str__(self):
         return struct.pack('>I', self.id) + _packString(self.nonce) + struct.pack('>B', 0x58)
 
@@ -806,7 +806,7 @@ class Publication(object):
             if _debug: print 'Publication.addListener() listener %r is already subscribed for publication %r'%(id, self.publisherId)
         else:
             self._listeners[id] = Listener(id, self, writer, unbuffered)
-    
+
 class Streams(object):
     '''Collection of streams by numeric id.'''
     def __init__(self):
@@ -877,7 +877,7 @@ class Message(object):
 
 class Flow(object):
     '''Flow serves as base class for individual flow type.
-    
+
     @ivar id (int) flow identifier
     @ivar signature (str) security signature
     '''
@@ -888,12 +888,12 @@ class Flow(object):
         self.error, self.packet, self.stage, self.completed, self.fragments, self.writer = None, None, 0, False, {}, FlowWriter(signature, session)
         if self.writer.flowId == 0:
             self.writer.flowId = id
-        
+
     def dup(self):
         f = Flow(self.id, self.signature, Peer(), self.server, self.session)
         f.stage, f.critical = self.stage, self.critical
         self.close()
-        
+
     @property
     def count(self):
         return len(self._messages)
@@ -905,12 +905,12 @@ class Flow(object):
         self.fragments.clear() # TODO: do we need to call close on values?
         self.packet = None
         self.writer.close()
-    
+
     def fail(self, error):
         if _debug: print 'Flow.fail() flow failed: %r, %s'%(self,id, error)
         if not self.completed:
             self.session.writeMessage(0x5e, _packLength7(self.id) + '\x00')
-    
+
     def unpack(self, data): # given data, return (type, remaining)
         if not data:
             return self.EMPTY
@@ -928,12 +928,12 @@ class Flow(object):
         else:
             if _debug: print 'Flow.unpack() error in unpacking type 0x%02x'%(type,)
             return (type, data[1:])
-    
+
     def commit(self):
         self.session.writeMessage(0x51, _packLength7(self.id) + chr(0x7f if self.writer.signature else 0x00) + _packLength7(self.stage))
         self.commitHandler()
         self.writer.flush()
-        
+
     def fragmentHandler(self, stage, deltaNack, fragment, flags):
         if self.completed:
             return
@@ -943,7 +943,7 @@ class Flow(object):
             return
         if deltaNack > stage or deltaNack == 0:
             deltaNack = stage
-        
+
         if flags & self.ABANDONMENT or self.stage < (stage - deltaNack):
             if _debug: print 'Flow.fragmentHandler() abandonment signal flag: %02x'%(flags,)
             toRemove = []
@@ -985,7 +985,7 @@ class Flow(object):
                 return
         else:
             self.stage = stage
-        
+
         msg = fragment
         if flags & self.WITH_BEFOREPART:
             if self.packet:
@@ -1031,7 +1031,7 @@ class Flow(object):
             if not self.completed and self.writer.signature:
                 if _debug: print 'Flow.fragmentSortedHandler() flow consumed: %r'%(self.id,)
             self.completed = True
-    
+
     def messageHandler(self, name, message):
         if _debug: print 'Flow.messageHandler() unknown message: %r name=0x%02x data=%r'%(self.id, name, message)
     def rawHandler(self, type, data):
@@ -1047,17 +1047,17 @@ class Flow(object):
 
 class FlowConnection(Flow):
     signature = '\x00\x54\x43\x04\x00'
-    
+
     def __init__(self, id, peer, server, session):
         Flow.__init__(self, id, self.signature, peer, server, session)
         self._streamIndex = set()
         self.writer.critical = True
-        
+
     def close(self):
         Flow.close(self)
         for stream in self._streamIndex:
             self.server.streams.destroy(stream)
-            
+
     def messageHandler(self, name, reader):
         if name == 'connect':
             data = reader.read() # dict or amf.Object
@@ -1097,12 +1097,12 @@ class FlowConnection(Flow):
 
 class FlowGroup(Flow):
     signature = '\x00\x47\x43'
-    
+
     def __init__(self, id, peer, server, session):
         Flow.__init__(self, id, self.signature, peer, server, session)
         self._bestPeers, self._group = [], None
         self.writer.flowId = id
-        
+
     def close(self):
         Flow.close(self)
         if self._group:
@@ -1138,11 +1138,11 @@ class FlowStream(Flow):
         self._state, self._isVideo, self._lostFragments = FlowStream.IDLE, False, 0
         self._index, remaining = _unpackLength7(signature[4:])
         self._publication = self.server.streams.publications(self._index)
-        
+
     def close(self):
         Flow.close(self)
         self.disengage()
-        
+
     def disengage(self):
         if self.state == FlowStream.PUBLISHING:
             self.server.streams.unpublish(self.peer, self._index, self.name)
@@ -1151,7 +1151,7 @@ class FlowStream(Flow):
             self.server.streams.unsubscribe(self.peer, self._index, self.name)
             self.writer.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Play.Stop', description="Stopped playing '%s'"%(self.name,)))
         self.state = FlowStream.IDLE
-    
+
     def audioHandler(self, data):
         if self._publication and self._publication.publisherId == self._index:
             self._publication.pushAudioPacket(self.peer, struct.unpack('>I', data[:4])[0], data[4:], self._lostFragments)
@@ -1169,7 +1169,7 @@ class FlowStream(Flow):
     def commitHandler(self):
         if self._publication and self._publication.publisherId == self._index:
             self._publication.flush()
-    
+
     def rawHandler(self, type, data):
         flag = struct.unpack('>H', data[:2])[0]
         if flag == 0x22:
@@ -1213,7 +1213,7 @@ class FlowStream(Flow):
                 self.write.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Publish.BadName', description='"%s" is already publishing'%(self.name,)))
         else:
             Flow.messageHandler(self, action, msg)
-    
+
 class FlowWriter(object):
     def __init__(self, signature, session):
         self.id = self.flowId = self.stage = self._lostMessages = self.callbackHandle = self._resetCount = 0
@@ -1222,7 +1222,7 @@ class FlowWriter(object):
         self._messages = []
         self.signature, self.session = signature, session
         session.initFlowWriter(self)
-    
+
     def dup(self):
         result = FlowWriter(self.signature, self.session)
         result.id, result.stage, result.critical = self.id, self.stage, self.critical
@@ -1234,7 +1234,7 @@ class FlowWriter(object):
             self._lostMessages += 1
         if not self._messages:
             self._trigger.stop()
-    
+
     def close(self):
         if self.closed:
             return
@@ -1252,7 +1252,7 @@ class FlowWriter(object):
         self.stage = 0
         self._resetCount += 1
         self.reset(self._resetCount)
-            
+
     @property
     def count(self):
         return len(self._messages)
@@ -1289,7 +1289,7 @@ class FlowWriter(object):
             self._trigger.reset()
         else:
             self._trigger.stop()
-            
+
     def manage(self, server):
         try:
             if not self._trigger.dispatch():
@@ -1298,7 +1298,7 @@ class FlowWriter(object):
             self.clearMessages()
             raise
         self.raiseMessage()
-    
+
     def raiseMessage(self):
         if not self._messages or not self._messages[0].fragments:
             self._trigger.stop()
@@ -1318,20 +1318,20 @@ class FlowWriter(object):
                     deltaNack += len(msg.fragments)
                     index += 1
                 continue
-            
+
             stage = msg.startStage
             end = False
             available = msg.fragments[0] if msg.fragments else 0
             fragment = msg.fragments[0] if msg.fragments else None
             index = 0
-            
+
             while not end and index < len(msg.fragments):
                 index += 1
                 size, end = available, (index == (len(msg.fragments) - 1))
                 if not end:
                     size, fragment = msg.fragments[index] - fragment, msg.fragments[index]
                 flags = (stage == 0 and Flow.HEADER or 0) | (self.closed and Flow.END or 0) | (stage > msg.startStage and Flow.WITH_BEFOREPART or 0) | (not end and Flow.WITH_AFTERPART or 0)
-                
+
                 data = chr(flags)
                 if header:
                     data += _packLength7(self.id) + _packLength7(stage+1) + _packLength7(deltaNack+1)
@@ -1343,7 +1343,7 @@ class FlowWriter(object):
                 data += msg.data(size)
                 self.session.writeMessage(header and 0x10 or 0x11, data)
                 header = False
-    
+
     def flush(self, full=False):
         if _debug: print '   FlowWriter.flush(full=%r)'%(full,)
         header = not self.session.canWriteFollowing(self)
@@ -1383,23 +1383,23 @@ class FlowWriter(object):
                     header = False
                 size -= 4
                 self.stage += 1
-                
+
                 data = chr(flags)
                 if head:
                     data += hbytes
                     size -= len(hbytes)
-                    
+
                 available -= size
                 data += reader.read(size)
                 self.session.writeMessage(head and 0x10 or 0x11, data)
                 msg.fragments.append(fragments)
                 fragments += size
-                
+
                 if available <= 0:
                     break
         if full:
             self.session.flush()
-    
+
     def createMessage(self, buffered, data=None, memAck=None):
         if self.closed or not self.signature:
             return None
@@ -1409,7 +1409,7 @@ class FlowWriter(object):
         if len(self._messages) > 100:
             if _debug: print 'FlowWriter.createMessage() flow messages size=%d'%(len(self._messages))
         return message
-    
+
     def writeRawMessage(self, data, withoutHeader=False):
         if _debug: print '   writeRawMessage()'
         msg = self.createMessage(buffered=True)
@@ -1417,7 +1417,7 @@ class FlowWriter(object):
             msg.stream.write(struct.pack('>BI', 0x04, 0))
         msg.stream.write(data)
         return msg
-    
+
     def writeAMFMessage(self, name, *args):
         if _debug: print '   writeAMFMessage(name=%r, args=%r)'%(name, args)
         msg = self.createMessage(buffered=True)
@@ -1450,7 +1450,7 @@ class StreamWriter(FlowWriter):
 class AudioWriter(StreamWriter):
     def __init__(self, signature, session):
         StreamWriter.__init__(self, 0x08, signature, session)
-        
+
 class VideoWriter(StreamWriter):
     def __init__(self, signature, session):
         StreamWriter.__init__(self, 0x09, signature, session)
@@ -1462,7 +1462,7 @@ class Listener(object):
         self._firstKeyFrame = False
         self._audioWriter, self._videoWriter = writer.newFlowWriter(AudioWriter), writer.newFlowWriter(VideoWriter)
         self.writeBounds()
-        
+
     def close(self):
         self._audioWriter.close()
         self._videoWriter.close()
@@ -1579,17 +1579,17 @@ class Session(object):
         self._flows, self._flowWriters, self._handshakeAttempts = {}, {}, {}
         self._writer = PacketWriter()
         self._recvTs = time.time() # TODO: is this correct?
-    
+
     def __repr__(self):
         return '<Session id=%r farId=%r peer=%r />'%(self.id, self.farId, self.peer)
-        
+
     def close(self):
         self.kill()
         if self.peer.state != 'none':
             if _debug: 'onDisconnect client handler has not been called on the session', self.id
         for flow in self._flows.itervalues():
             flow.close()
-    
+
     def kill(self):
         if self.died:
             return
@@ -1598,7 +1598,7 @@ class Session(object):
             self.server.onDisconnect(self.peer)
             self.server.count -= 1
         self.died = self.failed = True
-    
+
     def manage(self):
         if self.died:
             return
@@ -1625,7 +1625,7 @@ class Session(object):
         for id in toDelete:
             del self._flowWriters[id]
         self.flush()
-    
+
     def keepAlive(self):
         if _debug: print 'Session.keepAlive() server'
         if self._timesKeepalive == 10:
@@ -1634,7 +1634,7 @@ class Session(object):
         self._timesKeepalive += 1
         self.writeMessage(0x01, '')
         return True
-    
+
     def fail(self, error):
         if self.failed:
             return
@@ -1807,7 +1807,7 @@ class Session(object):
                     flow = self._flowNull
             elif type != 0x11:
                 if _debug: print 'Session.handle() error: unknown message type 0x%02x'%(type,)
-                    
+
             if type == 0x10 or type == 0x11: # special request, in repeat case, following stage request
                 stage, deltaNack = stage + 1, deltaNack + 1
                 if type == 0x11:
@@ -1815,7 +1815,7 @@ class Session(object):
                 flow.fragmentHandler(stage, deltaNack, message, flags)
                 if flow.error:
                     self.fail(flow.error)
-            
+
             nextType = ord(remaining[0]) if remaining else 0xFF
             if flow and stage > 0 and nextType != 0x11:
                 flow.commit()
@@ -1824,10 +1824,10 @@ class Session(object):
                     flow.close()
                 flow = None
         self.flush()
-    
+
     def flowWriter(self, id):
         return self._flowWriters.get(id, None)
-    
+
     def flow(self, id):
         result = self._flows.get(id, None)
         if not result:
@@ -1854,7 +1854,7 @@ class Session(object):
             if _debug: print 'Session.createFlow() new flow %u on session %u'%(id, self.id)
             self._flows[id] = flow
         return flow
-    
+
     def initFlowWriter(self, flowWriter):
         self._nextFlowWriterId += 1
         while self._nextFlowWriterId == 0 or self._nextFlowWriterId in self._flowWriters:
@@ -1866,7 +1866,7 @@ class Session(object):
 
     def resetFlowWriter(self, flowWriter):
         self._flowWriters[flowWriter.id] = flowWriter
-    
+
     def canWriteFollowing(self, flowWriter):
         return self._lastFlowWriter == flowWriter
 
@@ -1877,12 +1877,12 @@ class Handshake(Session):
         self._certificate = '\x01\x0A\x41\x0E' + _random(64) + '\x02\x15\x02\x02\x15\x05\x02\x15\x0E' # 4+64+9=77 bytes
         self._cookies = {} # unfinished sessions TODO: need to use auto-generated cookie instead of storing it to avoid SYN flooding DoS.
         if _debug: print 'Handshake() server id=%r'%(hashlib.sha256(self._certificate).digest(),)
-    
+
     def close(self):
         for item in self._cookies.values():
             item.close()
         self._cookies.clear()
-        
+
     def manage(self):
         toRemove = [cookieId for cookieId, cookie in self._cookies.iteritems() if cookie.obsolete]
         for cookieId in toRemove:
@@ -1917,7 +1917,7 @@ class Handshake(Session):
         self._writer.write(response)
         self.flush(self.SYMMETRIC_ENCODING | self.WITHOUT_ECHO_TIME)
         self.farId = 0
-        
+
     def _handshake(self, id, payload):
         if _debug: print '   handshake id=0x%02x'%(id,)
         if id == 0x30:
@@ -1962,7 +1962,7 @@ class Handshake(Session):
             return (0x78, response)
         else:
             raise ValueError('unknown handshake packet id 0x%02x'%(id,))
-    
+
     def finishHandshake(self, cookie):
         respId, response = 0x78, str(cookie)
         if _debug: print '   handshake continue response type=0x%02x\n     id=%r\n     server-nonce=%s'%(0x78, cookie.id, truncate(cookie.nonce))
@@ -1970,24 +1970,24 @@ class Handshake(Session):
         self._writer.write(response)
         self.flush(self.SYMMETRIC_ENCODING | self.WITHOUT_ECHO_TIME)
         self.farId = 0
-        
+
     def _createCookie(self, cookie):
         cookieId = _random(64)
         self._cookies[cookieId] = cookie
         return _packString(cookieId, 8)
-        
+
 class Middle(Session):
     def __init__(self, server, id, farId, peer, dKey, eKey, sessions, target):
         Session.__init__(self, server, id, farId, peer, dKey, eKey)
         self.sessions, self.target, self.middlePeer = sessions, target, peer
         self._isPeer, self._middleId, self._firstResponse, self._queryUrl, self._span = target.isPeer, 0, False, 'rtmfp://%s%s'%(_address2ipport(target.address), peer.path), 0
         self._middleAesDecrypt = self._middleAesEncrypt = self._middleDH = self._targetNonce = self._sharedSecret = None
-        
+
         self._socket = socket.socket(type=socket.SOCK_DGRAM)
         self._socket.bind(('0.0.0.0', 0)) # any random port
         self._gen = self.receiveFromTarget()
         multitask.add(self._gen)
-        
+
         self.middlePeer.path, self.middlePeer.parameters = _url2pathquery(self._queryUrl)
         self._middleCert = '\x02\x1D\x02\x41\x0E' + _random(64) + '\x03\x1A\x02\x0A\x02\x1E\x02' # 5+64+7=76 bytes
 #        self._pending = [] # list of pending messages from initiator before handshake with terminator is complete
@@ -2002,10 +2002,10 @@ class Middle(Session):
         if _debug: print '     random=%r'%(packet[-16:],)
         if _debug: print '   creating Middle()'
         self.sendHandshakeToTarget(0x30, packet)
-    
+
     def __repr__(self):
         return '<Middle id=%r farId=%r peer=%r />'%(self.id, self.farId, self.peer)
-    
+
     def close(self):
         Session.close(self)
         if self._gen is not None:
@@ -2014,7 +2014,7 @@ class Middle(Session):
         if self._socket:
             self._socket.close()
             self._socket = None
-            
+
     def receiveFromTarget(self):
         try:
             while True:
@@ -2048,7 +2048,7 @@ class Middle(Session):
         except GeneratorExit: pass
         except:
             if _debug: print 'exception in Middle task'; traceback.print_exc()
-            
+
     def sendHandshakeToTarget(self, type, data):
         now, marker = time.time(), 0x0b
         data = '\x00'*6 + struct.pack('>BHBH', marker, int(now*1000/4) & 0xffff, type, len(data)) + data
@@ -2058,7 +2058,7 @@ class Middle(Session):
 #        self.server.send(data, self.target.address)
         if _debug: print '=> %s:%d [%d] (source=%s:%d)'%(self.target.address[0], self.target.address[1], len(data), self._socket.getsockname()[0], self._socket.getsockname()[1])
         self._socket.sendto(data, self.target.address)
-    
+
     def sendToTarget(self, data):
         if not self._middleAesEncrypt:
             if _debug: print 'critical error: send to target packet impossible because the middle handshake has failed'
@@ -2121,10 +2121,10 @@ class Middle(Session):
             dkey, ekey = _asymetricKeys(self._sharedSecret, self._middleCert, self._targetNonce)
             self._middleAesEncrypt, self._middleAesDecrypt = AESEncrypt(dkey), AESDecrypt(ekey)
             if _debug: print '   middle shared secret %s'%(truncate(self._sharedSecret),)
-            
+
             if hasattr(self, '_handshakeCookie'):
                 self.server._handshake.finishHandshake(self._handshakeCookie)
-                
+
             ## handle pending messages from initiator
             #self._pending, pending = [], self._pending
             #if _debug: print '   pending messages %d'%(len(pending),)
@@ -2132,7 +2132,7 @@ class Middle(Session):
             #    self.handle(data, sender)
         else:
             if _debug: print 'error: unknown target handshake type 0x%02x'%(type,)
-    
+
     #def handleFromTarget(self, sessionId, data, sender):
     #    if sessionId != 0 and self._middleAesDecrypt:
     #        data = _decode(self._middleAesDecrypt, data)
@@ -2149,13 +2149,13 @@ class Middle(Session):
     #        self.targetHandshakeHandler(type, content)
     #    else:
     #        if _debug: print 'Middle.handleFromTarget() AES not initialized'
-            
+
     def handle(self, data, sender):
         #if not self._middleAesEncrypt:
         #    if _debug: print 'wait for handshake response'
         #    self._pending.append((data, sender))
         #    return
-            
+
         self.peer.address = sender
         if self._target:
             self._target.address = sender
@@ -2167,14 +2167,14 @@ class Middle(Session):
             if _debug: print '   ping=%r'%(struct.unpack('>H', data[3:5])[0],)
             request += data[3:5]
             index += 2
-        
+
         remaining = data[index:] # remaining data
         while remaining and ord(remaining[0]) != 0xFF:
             type, size = struct.unpack('>BH', remaining[:3])
             if _debug: print '   type=0x%02x'%(type,)
             content, remaining, newdata = remaining[3:3+size], remaining[3+size:], ''
             if _debug: print '   content=%s'%(truncate(content),)
-            
+
             if type == 0x10:
                 first, content = content[0], content[1:]
                 idFlow, content = _unpackLength7(content)
@@ -2190,7 +2190,7 @@ class Middle(Session):
                         writer.write(reader.read()) # should be a number
                         obj = reader.read() # Object
                         if isinstance(obj, amf.Object) and hasattr(obj, 'tcUrl'):
-                            old, obj.tcUrl = obj.tcUrl, self._queryUrl
+                            obj.tcUrl = self._queryUrl
                         writer.write(obj)
                         newdata += writer.data.getvalue()
                     elif idFlow == 0x02 and stage == 0x02: # replace set peer info
@@ -2227,15 +2227,15 @@ class Middle(Session):
                                 if _debug: print 'error: handshake netgroup packet between peers without corresponding group'
             elif type == 0x4C:
                 self.kill()
-                
+
             newdata += content
             if _debug: print '   newdata=%s'%(truncate(newdata),)
             request += struct.pack('>BH', type, len(newdata)) + newdata
             if _debug: print '   new request type=0x%02x len=%d'%(type, len(request,))
-            
+
         if len(request) > index:
             self.sendToTarget(request)
-    
+
     def targetPacketHandler(self, data):
         if self._firstResponse:
             self._recvTs = time.time()
@@ -2315,18 +2315,18 @@ class Middle(Session):
             if _debug: print 'info %r peers sending'%(nbPeerSent,)
         if request:
             self.flush(flags=0, message=request)
-    
+
     def failSignal(self):
         Session.failSignal(self)
         if self._middleAesEncrypt:
             data = struct.pack('>BHBH', 0x4a, int(time.time()*1000/4) & 0xffff, 0x4c, 0)
             self.sendToTarget(data)
-    
+
 
 #--------------------------------------
 # CONTROL: FlashServer
 #--------------------------------------
-        
+
 class FlashServer(rtmp.FlashServer):
     '''A combined RTMFP and RTMP server.'''
     def __init__(self):
@@ -2334,7 +2334,7 @@ class FlashServer(rtmp.FlashServer):
         self._handshake = Handshake(self)
         self.sockUdp, self.sessions, self._nextId = None, {0: self._handshake}, 0
         self.streams, self.count, self.keep_alive_server, self.keep_alive_peer, self._groups, self._timeLastManage = Streams(), 0, 15, 10, [], 0 # from handler
-    
+
     def close(self):
         [x.close() for x in self._groups] # from handler
         self._groups[:] = []
@@ -2349,7 +2349,7 @@ class FlashServer(rtmp.FlashServer):
             sock.bind((options.host, options.port))
             if _debug: print 'FlashServer.start() listening udp on ', sock.getsockname()
             multitask.add(self.serverudplistener())
-            
+
     def stop(self):
         rtmp.FlashServer.stop(self)
         self._handshake.close()
@@ -2358,7 +2358,7 @@ class FlashServer(rtmp.FlashServer):
         if self.sockUdp:
             try: self.sockUdp.close(); self.sockUdp = None
             except: pass
-            
+
     def serverudplistener(self, max_size=2048):
         try:
             while True:
@@ -2385,7 +2385,7 @@ class FlashServer(rtmp.FlashServer):
                         #else:
                         #    session = self.sessions[sessionId]
                         session = self.sessions[sessionId]
-                        
+
                         if not isinstance(session, Handshake) and not session.checked:
                             self._handshake.commitCookie(session)
                         try:
@@ -2395,18 +2395,18 @@ class FlashServer(rtmp.FlashServer):
                                 session.handle(data, remote)
                         except GeneratorExit: raise
                         except StopIteration: raise
-                        except: 
+                        except:
                             if _debug: print 'FlashServer.serverudplistener() session exception', traceback.print_exc()
         except GeneratorExit: pass # terminate
         except StopIteration: raise
-        except: 
+        except:
             if _debug: print 'FlashServer.serverudplistener() exception', traceback.print_exc()
-    
+
     def send(self, data, remote): # a wrapper around socket.sendto for local UDP socket
 #        if _debug: print 'socket.sendto %r\n    data=%s'%(remote, truncate(data))
         if _debug: print '=> %s:%d [%d]'%(remote[0], remote[1], len(data))
         return self.sockUdp.sendto(data, remote)
-        
+
     def group(self, id):
         for group in self._groups:
             if group.operator == id:
@@ -2444,7 +2444,7 @@ class FlashServer(rtmp.FlashServer):
             if _debug: print '   created %r'%(session,)
         self.sessions[session.id] = session
         return session.id
-    
+
     def handshakeP2P(self, tag, address, peerIdWanted):
         # TODO: we need a better way to associate the session based on the far-id parameter?
         found = [session for session in self.sessions.itervalues() if session.peer.address == address and session != self._handshake]
@@ -2458,7 +2458,7 @@ class FlashServer(rtmp.FlashServer):
         elif sessionWanted.failed:
             if _debug: print 'FlashServer.handshakeP2P() UDP hole punching: session wanted is deleting'
             return (0, '')
-            
+
         if self.middle:
             if _debug: print '   p2p-handshake processing middle mode target=', sessionWanted._target
             if sessionWanted._target:
@@ -2469,17 +2469,17 @@ class FlashServer(rtmp.FlashServer):
                 return (0x70, response)
             else:
                 if _debug: print 'error: peer/peer dumped exchange impossible: no corresponding target with the session wanted'
-        
+
         sessionWanted.handshakeP2P(address, tag, session)
         response = _packAddress(sessionWanted.peer.address, True)
-        
+
         if _debug: print '   p2p-handshake sessionWanted.peer.privateAddress=%r'%(sessionWanted.peer.privateAddress,)
         for addr in sessionWanted.peer.privateAddress:
             if addr == address:
                 continue
             response += _packAddress(addr, False)
         return (0x71, response)
-    
+
     def manage(self):
         if self._timeLastManage > time.time() - 2:
             #if self.middle:
@@ -2500,42 +2500,42 @@ class FlashServer(rtmp.FlashServer):
             del self.sessions[sessionId]
         if self._timeLastManage < time.time() - 0.020: # more than 20ms
             if _debug: print 'FlashServer.manage() warning: process management lasted more than 20ms: %d'%(time.time() - self._timeLastManage,)
-    
+
     # callbacks from the session
     def onConnect(self, client, flowWriter): # return True to accept the session from this client/peer
         # TODO: perform any authentication based on client.parameters. Set any client.data if needed.
         # TODO: perform any status page processing
         return True
-    
+
     def onDisconnect(self, client): # inform disconnection of session with client/peer
         pass
-    
+
     def onFailed(self, client, msg):
         if _debug: print 'FlashServer.onFailed() client failed %s'%(msg,)
-    
+
     def onMessage(self, client, name, reader, writer):
         if _debug: print 'FlashServer.onMessage() %s'%(name,)
         # TODO: perform any status message
         return False
-    
+
     def onPublish(self, client, publication):
         # TODO: add publication
         pass
-    
+
     def onUnpublish(self, client, publication):
         # TODO: add unpublication
         pass
-    
+
     def onSubscribe(self, client, listener):
         pass
-    
+
     def onUnsubscribe(self, client, listener):
         pass
-    
+
     def onAudioPacket(self, client, publication, time, packet):
         # TODO: update audio QoS
         pass
-    
+
     def onVideoPacket(self, client, publication, time, packet):
         # TODO: update video QoS
         pass
@@ -2562,14 +2562,14 @@ if __name__ == '__main__':
     group.add_option('',   '--no-rtmp', dest='no_rtmp', default=False, action='store_true', help='Disable RTMP over TCP. Default is to also keep RTMP over TCP')
     parser.add_option_group(group)
     (options, args) = parser.parse_args()
-    
+
     _debug = rtmp._debug = options.verbose
     if options.cirrus:
         if _debug: print 'main() using cirrus', options.cirrus
         options.freq_manage = 0
     if options.keep_alive_server < 5: options.keep_alive_server = 5
     if options.keep_alive_peer < 5: options.keep_alive_peer = 5
-    
+
     try:
         agent = FlashServer()
         agent.root = options.root
