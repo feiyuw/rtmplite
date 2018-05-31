@@ -428,7 +428,7 @@ Describe the man-in-middle mode that enables audio/video flowing through the ser
 '''
 
 import sys, traceback, urlparse, re, socket, struct, time, random, hmac, hashlib
-import multitask, amf, rtmp
+import multitask, amf
 
 try:
     from Crypto.Cipher import AES
@@ -2327,10 +2327,9 @@ class Middle(Session):
 # CONTROL: FlashServer
 #--------------------------------------
 
-class FlashServer(rtmp.FlashServer):
-    '''A combined RTMFP and RTMP server.'''
+class FlashServer(object):
+    '''A RTMFP server.'''
     def __init__(self):
-        rtmp.FlashServer.__init__(self)
         self._handshake = Handshake(self)
         self.sockUdp, self.sessions, self._nextId = None, {0: self._handshake}, 0
         self.streams, self.count, self.keep_alive_server, self.keep_alive_peer, self._groups, self._timeLastManage = Streams(), 0, 15, 10, [], 0 # from handler
@@ -2340,8 +2339,6 @@ class FlashServer(rtmp.FlashServer):
         self._groups[:] = []
 
     def start(self, options):
-        if not options.no_rtmp:
-            rtmp.FlashServer.start(self, options.host, options.port)
         self.cirrus, self.middle, self.freq_manage, self.keep_alive_server, self.keep_alive_peer = options.cirrus, options.middle, options.freq_manage, options.keep_alive_server, options.keep_alive_peer
         if not self.sockUdp:
             sock = self.sockUdp = socket.socket(type=socket.SOCK_DGRAM)
@@ -2351,7 +2348,6 @@ class FlashServer(rtmp.FlashServer):
             multitask.add(self.serverudplistener())
 
     def stop(self):
-        rtmp.FlashServer.stop(self)
         self._handshake.close()
         for session in self.sessions.itervalues(): session.close()
         self.sessions.clear()
@@ -2364,9 +2360,7 @@ class FlashServer(rtmp.FlashServer):
             while True:
                 self.manage()
                 data, remote = yield multitask.recvfrom(self.sockUdp, max_size)
-#                if _debug: print 'socket.recvfrom %r\n    data=%s'%(remote, truncate(data))
                 if _debug: print '<= %s:%d [%d]'%(remote[0], remote[1], len(data))
-                #print '%r'%(data,)
                 if len(data) < 12:
                     if _debug: print 'FlashServer.serverudplistener() invalid packet of length', len(data)
                 else:
@@ -2375,24 +2369,12 @@ class FlashServer(rtmp.FlashServer):
                         if _debug: print '   session %d not found'%(sessionId,)
                     else:
                         if _debug: print '   session id=%d'%(sessionId,)
-                        #if sessionId == 0:
-                        #    type = ord(_decode(self._handshake._aesDecrypt, data)[9])
-                        #    if type in (0x70, 0x71, 0x78): # handshake for p2p
-                        #        session = [s for s in self.sessions.itervalues() if isinstance(s, Middle) and s.target.address == remote] # Middle
-                        #        if session: session = session[0]
-                        #    else:
-                        #        session = self._handshake
-                        #else:
-                        #    session = self.sessions[sessionId]
                         session = self.sessions[sessionId]
 
                         if not isinstance(session, Handshake) and not session.checked:
                             self._handshake.commitCookie(session)
                         try:
-                            #if isinstance(session, Middle) and remote == session.target.address:
-                            #    session.handleFromTarget(sessionId, data, remote)
-                            #else:
-                                session.handle(data, remote)
+                            session.handle(data, remote)
                         except GeneratorExit: raise
                         except StopIteration: raise
                         except:
@@ -2403,7 +2385,6 @@ class FlashServer(rtmp.FlashServer):
             if _debug: print 'FlashServer.serverudplistener() exception', traceback.print_exc()
 
     def send(self, data, remote): # a wrapper around socket.sendto for local UDP socket
-#        if _debug: print 'socket.sendto %r\n    data=%s'%(remote, truncate(data))
         if _debug: print '=> %s:%d [%d]'%(remote[0], remote[1], len(data))
         return self.sockUdp.sendto(data, remote)
 
@@ -2482,10 +2463,6 @@ class FlashServer(rtmp.FlashServer):
 
     def manage(self):
         if self._timeLastManage > time.time() - 2:
-            #if self.middle:
-            #    for session in self.sessions.itervalues():
-            #        if session and isinstance(session, Middle):
-            #            session.manage()
             return
         self._timeLastManage = time.time()
         self._handshake.manage()
@@ -2559,11 +2536,10 @@ if __name__ == '__main__':
     group.add_option('',   '--freq-manage', dest='freq_manage', type='int', default=2, help='frequency manage in seconds. Default 2')
     group.add_option('',   '--keep-alive-server', dest='keep_alive_server', default=15, type='int', help='Keep alive interval with server. Default 15')
     group.add_option('',   '--keep-alive-peer', dest='keep_alive_peer', default=10, type='int', help='Keep alive interval with peer. Default 10')
-    group.add_option('',   '--no-rtmp', dest='no_rtmp', default=False, action='store_true', help='Disable RTMP over TCP. Default is to also keep RTMP over TCP')
     parser.add_option_group(group)
     (options, args) = parser.parse_args()
 
-    _debug = rtmp._debug = options.verbose
+    _debug = options.verbose
     if options.cirrus:
         if _debug: print 'main() using cirrus', options.cirrus
         options.freq_manage = 0

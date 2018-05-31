@@ -56,7 +56,7 @@ two unrelated tasks to run concurrently:
   ...     while True:
   ...         print message
   ...         yield
-  ... 
+  ...
   >>> multitask.add(printer('hello'))
   >>> multitask.add(printer('goodbye'))
   >>> multitask.run()
@@ -103,26 +103,26 @@ raised within a child task is propagated to its parent.  For example:
   ...         yield raise_exception()
   ...     except Exception, e:
   ...         print 'caught exception: %s' % e
-  ... 
+  ...
   >>> def return_none():
   ...     yield
   ...     # do nothing
   ...     # or return
   ...     # or raise StopIteration
   ...     # or raise StopIteration(None)
-  ... 
+  ...
   >>> def return_one():
   ...     yield
   ...     raise StopIteration(1)
-  ... 
+  ...
   >>> def return_many():
   ...     yield
   ...     raise StopIteration(2, 3)  # or raise StopIteration((2, 3))
-  ... 
+  ...
   >>> def raise_exception():
   ...     yield
   ...     raise RuntimeError('foo')
-  ... 
+  ...
   >>> multitask.add(parent())
   >>> multitask.run()
   None
@@ -146,7 +146,6 @@ import types
 
 __author__   = 'Christopher Stawarz <cstawarz@csail.mit.edu>'
 __version__  = '0.2.0'
-# __revision__ = int('$Revision$'.split()[1])
 
 
 
@@ -701,10 +700,10 @@ class SmartQueue(object):
     A multi-producer, multi-consumer FIFO queue (similar to
     Queue.Queue) that can be used for exchanging data between tasks.
     The difference with Queue is that this implements filtering criteria
-    on get and allows multiple get to be signalled for the same put. 
+    on get and allows multiple get to be signalled for the same put.
     On the downside, this uses list instead of deque and has lower
     performance.
-    
+
     """
 
     def __init__(self, contents=(), maxsize=0):
@@ -729,7 +728,7 @@ class SmartQueue(object):
         #self._pending = filter(lambda x: x[1]<=now, self._pending) # remove expired ones
         if criteria:
             found = filter(lambda x: criteria(x), self._pending)   # check any matching criteria
-            if found: 
+            if found:
                 self._pending.remove(found[0])
                 return found[0]
             else:
@@ -775,9 +774,9 @@ class SmartQueue(object):
         when item has been added to the queue.  If timeout is not
         None, a Timeout exception will be raised in the yielding task
         if no space is available after timeout seconds have elapsed.
-        TODO: Otherwise if space is available, the timeout specifies how 
+        TODO: Otherwise if space is available, the timeout specifies how
         long to keep the item in the queue before discarding it if it
-        is not fetched in a get. In this case it doesnot throw exception. 
+        is not fetched in a get. In this case it doesnot throw exception.
         For example:
 
           try:
