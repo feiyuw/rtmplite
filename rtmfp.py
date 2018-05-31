@@ -535,6 +535,7 @@ def _packLength7(value):
     d, c, b, a = (value & 0x7F), ((value & 0x03f80) >> 7), ((value & 0x1fc000) >> 14), ((value & 0x0fe00000) >> 21)
     return (chr(0x80 | a) if a else '') + (chr(0x80 | b) if a or b else '') + (chr(0x80 | c) if a or b or c else '') + chr(d)
 
+
 def _unpackLength7(data): # return (value, remaining)
     value = index = 0
     while index < 4:
@@ -542,24 +543,28 @@ def _unpackLength7(data): # return (value, remaining)
         value = (value << 7) | (byte & 0x7f)
         index += 1
         if byte & 0x80 == 0: break
-    # if _debug: print 'unpackLength7 %r %r'%(data[:4], value)
     return (value, data[index:])
+
 
 def _packString(value, sizeLength=None):
     return (struct.pack('>H', len(value)) if sizeLength == 16 else struct.pack('>B', len(value)) if sizeLength == 8 else _packLength7(len(value))) + value
+
 
 def _unpackString(data, sizeLength=None): # returns (value, remaining)
     length, data = (struct.unpack('>H', data[:2])[0], data[2:]) if sizeLength == 16 else (struct.unpack('>B', data[:1])[0], data[1:]) if sizeLength == 8 else _unpackLength7(data)
     return (data[:length], data[length:])
 
+
 def _packAddress(value, publicFlag):
     return chr((0x02 if publicFlag else 0x01) | (0x80 if value[0].find(':') >= 0 else 0)) + _address2str(value)
+
 
 def _url2pathquery(value):
     '''Unpack an rtmfp URL to (path, dict) where dict is query parameters indexed by name, with value as list.'''
     url1 = urlparse.urlparse(value)
     url2 = urlparse.urlparse(re.sub('^' + url1.scheme, 'http', value))
     return (url2.path, urlparse.parse_qs(url2.query))
+
 
 def truncate(data, size=16, pre=8, post=5):
     length, data = len(data), (data if len(data) <= size else data[:pre] + '...' + data[-post:])
@@ -577,12 +582,14 @@ _dh1024p = _bin2int('\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xC9\x0F\xDA\xA2\x21\x68\xC
 _random = lambda size: ''.join([chr(random.randint(0, 255)) for i in xrange(size)])
 _bin2hex = lambda data: ''.join(['%02x'%(ord(x),) for x in data])
 
+
 def _checkSum(data):
     data, last = (data[:-1], ord(data[-1])) if len(data) % 2 != 0 else (data, 0)
-    sum = reduce(lambda x,y: x+y, [(ord(x) << 8 | ord(y)) for x, y in zip(data[::2], data[1::2])], 0) + last
-    sum = (sum >> 16) + (sum & 0xffff)
-    sum += (sum >> 16)
-    return (~sum) & 0xffff
+    cs = reduce(lambda x,y: x+y, [(ord(x) << 8 | ord(y)) for x, y in zip(data[::2], data[1::2])], 0) + last
+    cs = (cs >> 16) + (cs & 0xffff)
+    cs += (cs >> 16)
+    return (~cs) & 0xffff
+
 
 def _decode(decoder, data):
     raw = data[:4] + decoder.decode(data[4:])
@@ -591,29 +598,35 @@ def _decode(decoder, data):
         raise ValueError('invalid checksum')
     return raw
 
+
 def _encode(encoder, data):
     plen = (0xffffffff - len(data) + 5) & 0x0f # 4-bytes header, plen = 16*N - len for some int N and 0 <= plen < 16 (128 bits)
     data += ''.join(['\xff' for i in xrange(plen)])
     data = data[:4] + struct.pack('>H', _checkSum(data[6:])) + data[6:]
     return data[:4] + encoder.encode(data[4:])
 
+
 def _unpackId(data):
     a, b, c = struct.unpack('>III', data[:12])
     return a^b^c
+
 
 def _packId(data, farId):
     b, c = struct.unpack('>II', data[4:12])
     a = b^c^farId
     return struct.pack('>I', a) + data[4:]
 
+
 def _beginDH():
     '''Using known p (1024bit prime) and g=2, return (x, y) where x=random private value, y=g^x mod p public value.'''
     g, x = 2, _bin2int(_random(128))
     return (x, pow(g, x, _dh1024p))
 
+
 def _endDH(x, y):
     '''Using known p (1024bit prime), return secret=y^x mod p where x=random private value, y=other sides' public value.'''
     return pow(y, x, _dh1024p)
+
 
 def _asymetricKeys(secret, initNonce, respNonce): # returns (dkey, ekey)
     return (hmac.new(secret, hmac.new(respNonce, initNonce, hashlib.sha256).digest(), hashlib.sha256).digest(), hmac.new(secret, hmac.new(initNonce, respNonce, hashlib.sha256).digest(), hashlib.sha256).digest())
@@ -626,19 +639,25 @@ def _asymetricKeys(secret, initNonce, respNonce): # returns (dkey, ekey)
 class Entity(object):
     def __init__(self):
         self.id = '\x00'*32 # 32 byte value
+
     def __cmp__(self, other):
         return cmp(self.id, other.id) if isinstance(other, Entity) else cmp(self.id, other)
+
     def __hash__(self):
         return hash(self.id)
+
     def __repr__(self):
         return '<%s id=%s/>'%(self.__class__.__name__, self.id and truncate(self.id))
+
 
 class Client(Entity):
     def __init__(self):
         Entity.__init__(self)
         self.swfUrl = self.pageUrl = self.path = self.data = self.params = None
+
     def __repr__(self):
         return '<%s id=%s swfUrl=%r pageUrl=%r path=%r/>'%(self.__class__.__name__, self.id and truncate(self.id), self.swfUrl, self.pageUrl, self.path)
+
 
 class Peer(Client):
     '''A single peer representation.
@@ -650,6 +669,7 @@ class Peer(Client):
     @ivar groups (list) list of Group objects this Peer is part of.
     '''
     NONE, ACCEPTED, REJECTED = 'none', 'accepted', 'rejected' # peer state
+
     def __init__(self): # initialize the peer
         Client.__init__(self)
         self.address, self._privateAddress, self._ping, self.state, self.groups = None, [], 0, Peer.NONE, []
@@ -670,15 +690,18 @@ class Peer(Client):
 
     def _getPing(self):
         return self._ping
+
     def _setPing(self, value):
         self._ping = value
         for group in self.groups:
             group.peers.remove(self) # re-add so that sorted by ping time
             group.peers.add(self)
+
     ping = property(fget=_getPing, fset=_setPing)
 
     def _getPrivateAddress(self):
         return self._privateAddress
+
     def _setPrivateAddress(self, value):
         self._privateAddress[:] = [(x[0], x[1] or self.address[1]) for x in value]
     privateAddress = property(fget=_getPrivateAddress, fset=_setPrivateAddress)
@@ -686,33 +709,38 @@ class Peer(Client):
 
 class Peers(list):
     '''List of Peer objects kept sorted by ping property. Must use add() method to add to the list.'''
-    def __init__(self):
-        list.__init__()
     def close(self):
         self[:] = []
+
     def add(self, peer):
         if peer not in self:
             for index, p in enumerate(self):
                 if peer.ping >= p.ping:
                     break
             self.insert(index, peer)
+
     def best(self, asker, max_count=6):
         return ([x for x in self if not _isLocal(x.address) and x != asker] + [x for x in self if _isLocal(x.address) and x != asker])[:max_count]
 
+
 class Group(object):
     '''A Group has a unique id and a list of peers.'''
-    def __init__(self, id):
-        self.id, self.peers = id, Peers()
+    def __init__(self, gid):
+        self.id, self.peers = gid, Peers()
+
     def __cmp__(self, other):
-        return cmp(self.id, other.id if isinstance(other, group) else other)
+        return cmp(self.id, other.id if isinstance(other, Group) else other)
+
     def add(self, peer):
         if peer not in self.peers:
             peer.groups.append(self)
             self.peers.add(peer)
+
     def remove(self, peer):
         if peer in self.peers:
             peer.groups.remove(self)
             self.peers.remove(peer)
+
 
 class Target(Entity):
     def __init__(self, address, cookie=None):
@@ -729,8 +757,7 @@ class Target(Entity):
 
     def close(self):
         pass
-        #if self.DH: # why do we need to call _endDH() ?
-        #    self.DH = None
+
 
 class Cookie(object):
     def __init__(self, value):
@@ -747,8 +774,6 @@ class Cookie(object):
             self.nonce = '\x03\x1A\x00\x00\x02\x1E\x00\x81\x02\x0D\x02' + _int2bin(self.DH[1], 128) # len is 11+key
 
     def close(self):
-        #if not self.target and self.DH:
-        #    _endDH(self.DH)
         pass
 
     @property
@@ -776,10 +801,14 @@ class Cookie(object):
 #--------------------------------------
 
 class QoS(object):
-    '''Quality of service statistics for each stream and media type. Each sample is tuple (time, received, lost) of three int values.'''
+    '''
+    Quality of service statistics for each stream and media type.
+    Each sample is tuple (time, received, lost) of three int values.
+    '''
     def __init__(self):
         self.droppedFrames = self.lossRate = self.jitter = self.prevTime = self.reception = 0
         self.samples = []
+
     def add(self, tm, received, lost):
         now = time.time()
         if self.prevTime > 0 and tm >= self.prevTime:
@@ -790,61 +819,73 @@ class QoS(object):
         total, lost = sum([s[1] for s in self.samples]), sum([s[2] for s in self.sampels])
         if total != 0:
             self.lossRate = float(lost)/(total+lost)
+
     def close(self):
         self.droppedFrames = self.lossRate = self.jitter = self.prevTime = self.reception = 0
         self.samples[:] = []
 
+
 class Publication(object):
     def __init__(self, name):
         self.publisherId, self.name, self._time, self._firstKeyFrame, self._listeners, self.videoQoS, self.audioQoS = 0, name, 0, False, {}, QoS(), QoS()
+
     def close(self):
         for item in self._listeners.values():
             item.close()
         self._listeners.clear()
-    def addListener(self, client, id, writer, unbuffered):
-        if id in self._listeners:
-            if _debug: print 'Publication.addListener() listener %r is already subscribed for publication %r'%(id, self.publisherId)
+
+    def addListener(self, client, lid, writer, unbuffered):
+        if lid in self._listeners:
+            if _debug: print 'Publication.addListener() listener %r is already subscribed for publication %r'%(lid, self.publisherId)
         else:
-            self._listeners[id] = Listener(id, self, writer, unbuffered)
+            self._listeners[lid] = Listener(lid, self, writer, unbuffered)
+
 
 class Streams(object):
     '''Collection of streams by numeric id.'''
     def __init__(self):
         self._nextId, self.publications, self._streams = 0, {}, [] # publications is str=>Publication, and _streams is set of numeric id
+
     def create(self):
         while self._nextId == 0 or self._nextId in self._streams:
             self._nextId += 1
         self._streams.append(self._nextId)
         if _debug: print 'new stream %d'%(self._nextId,)
         return self._nextId
-    def destroy(self, id):
-        if _debug: print 'delete stream %d'%(id,)
-        if id in self._streams:
-            self._streams.remove(id)
-    def publish(self, client, id, name):
+
+    def destroy(self, lid):
+        if _debug: print 'delete stream %d'%(lid,)
+        if lid in self._streams:
+            self._streams.remove(lid)
+
+    def publish(self, client, lid, name):
         pub = self.publications[name] = Publication(name)
-        return pub.start(client, id)
-    def unpublish(self, client, id, name):
+        return pub.start(client, lid)
+
+    def unpublish(self, client, lid, name):
         if name not in self.publications:
-            if _debug: print 'the stream %s with a %u id does not exist, unpublish useless'%(name, id)
+            if _debug: print 'the stream %s with a %u id does not exist, unpublish useless'%(name, lid)
             return
         pub = self.publications[name]
-        pub.stop(client, id)
+        pub.stop(client, lid)
         if pub.publisherId == 0 and len(pub._listeners) == 0:
             del self.publications[name]
             pub.close()
-    def subscribe(self, client, id, name, writer, start=-2000):
+
+    def subscribe(self, client, lid, name, writer, start=-2000):
         pub = self.publications[name] = Publication(name)
-        pub.addListener(client, id, writer, start == -3000)
-    def unsubscribe(self, client, id, name):
+        pub.addListener(client, lid, writer, start == -3000)
+
+    def unsubscribe(self, client, lid, name):
         if name not in self.publications:
             if _debug: print 'the stream %s does not exist, unsubscribe useless'%(name,)
             return
         pub = self.publications[name]
-        pub.removeListener(client, id)
+        pub.removeListener(client, lid)
         if pub.publisherId == 0 and len(pub._listeners) == 0:
             del self.publications[name]
             pub.close()
+
 
 class Packet(object):
     '''Has one or more data fragments. Use data to access combined data, and count for number of fragments.'''
@@ -1908,7 +1949,7 @@ class Handshake(Session):
             if _debug: print '   Handshake.handle() invalid marker 0x%02x != 0x0b'%(marker,)
             return
         tm, id, size = struct.unpack('>HBH', data[7:12])
-        payload = data[12:12+size] if (len(data)>12+size) else data[12:]
+        payload = data[12:12+size]
         if _debug: print '   Handshake.handle() tm=%r id=0x%x size=%r'%(tm, id, size)
         respId, response = self._handshake(id, payload)
         if respId == 0:
@@ -2124,38 +2165,10 @@ class Middle(Session):
 
             if hasattr(self, '_handshakeCookie'):
                 self.server._handshake.finishHandshake(self._handshakeCookie)
-
-            ## handle pending messages from initiator
-            #self._pending, pending = [], self._pending
-            #if _debug: print '   pending messages %d'%(len(pending),)
-            #for data, sender in pending:
-            #    self.handle(data, sender)
         else:
             if _debug: print 'error: unknown target handshake type 0x%02x'%(type,)
 
-    #def handleFromTarget(self, sessionId, data, sender):
-    #    if sessionId != 0 and self._middleAesDecrypt:
-    #        data = _decode(self._middleAesDecrypt, data)
-    #        if _debug: print 'Middle.handleFromTarget() decoded [%r]\n%r'%(len(data), data[6:])
-    #        self.targetPacketHandler(data[6:])
-    #    elif sessionId == 0:
-    #        data = _decode(self.server._handshake._aesDecrypt, data)
-    #        if _debug: print 'Middle.handleFromTarget() decoded handshake [%r]\n%r'%(len(data), data[6:])
-    #        if ord(data[6]) != 0x0b:
-    #            if _debug: print 'error: target handshake received with a marker different than 0b'
-    #            return
-    #        tm, type, size = struct.unpack('>HBH', data[7:12])
-    #        content = data[12:12+size]
-    #        self.targetHandshakeHandler(type, content)
-    #    else:
-    #        if _debug: print 'Middle.handleFromTarget() AES not initialized'
-
     def handle(self, data, sender):
-        #if not self._middleAesEncrypt:
-        #    if _debug: print 'wait for handshake response'
-        #    self._pending.append((data, sender))
-        #    return
-
         self.peer.address = sender
         if self._target:
             self._target.address = sender
@@ -2341,7 +2354,7 @@ class FlashServer(object):
     def start(self, options):
         self.cirrus, self.middle, self.freq_manage, self.keep_alive_server, self.keep_alive_peer = options.cirrus, options.middle, options.freq_manage, options.keep_alive_server, options.keep_alive_peer
         if not self.sockUdp:
-            sock = self.sockUdp = socket.socket(type=socket.SOCK_DGRAM)
+            sock = self.sockUdp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((options.host, options.port))
             if _debug: print 'FlashServer.start() listening udp on ', sock.getsockname()
@@ -2349,11 +2362,15 @@ class FlashServer(object):
 
     def stop(self):
         self._handshake.close()
-        for session in self.sessions.itervalues(): session.close()
+        for session in self.sessions.itervalues():
+            session.close()
         self.sessions.clear()
         if self.sockUdp:
-            try: self.sockUdp.close(); self.sockUdp = None
-            except: pass
+            try:
+                self.sockUdp.close()
+                self.sockUdp = None
+            except:
+                pass
 
     def serverudplistener(self, max_size=2048):
         try:
@@ -2375,12 +2392,16 @@ class FlashServer(object):
                             self._handshake.commitCookie(session)
                         try:
                             session.handle(data, remote)
-                        except GeneratorExit: raise
-                        except StopIteration: raise
+                        except GeneratorExit:
+                            raise
+                        except StopIteration:
+                            raise
                         except:
                             if _debug: print 'FlashServer.serverudplistener() session exception', traceback.print_exc()
-        except GeneratorExit: pass # terminate
-        except StopIteration: raise
+        except GeneratorExit:
+            pass # terminate
+        except StopIteration:
+            raise
         except:
             if _debug: print 'FlashServer.serverudplistener() exception', traceback.print_exc()
 
