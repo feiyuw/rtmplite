@@ -1911,6 +1911,7 @@ class Session(object):
     def canWriteFollowing(self, flowWriter):
         return self._lastFlowWriter == flowWriter
 
+
 class Handshake(Session):
     '''P2P handshake'''
     def __init__(self, server):
@@ -1938,7 +1939,6 @@ class Handshake(Session):
             if _debug: print 'Handshake.commitCookie() cookie for session[%r] not found'%(session.id,)
 
     def handle(self, data, sender):
-        #self._recvTs = time.time()
         self.peer.address = sender
         if self._target:
             self._target.address = sender
@@ -1948,10 +1948,10 @@ class Handshake(Session):
         if marker != 0x0b:
             if _debug: print '   Handshake.handle() invalid marker 0x%02x != 0x0b'%(marker,)
             return
-        tm, id, size = struct.unpack('>HBH', data[7:12])
+        tm, _id, size = struct.unpack('>HBH', data[7:12])
         payload = data[12:12+size]
-        if _debug: print '   Handshake.handle() tm=%r id=0x%x size=%r'%(tm, id, size)
-        respId, response = self._handshake(id, payload)
+        if _debug: print '   Handshake.handle() tm=%r id=0x%x size=%r' % (tm, _id, size)
+        respId, response = self._handshake(_id, payload)
         if respId == 0:
             return
         response = struct.pack('>BH', respId, len(response)) + response
@@ -1959,9 +1959,9 @@ class Handshake(Session):
         self.flush(self.SYMMETRIC_ENCODING | self.WITHOUT_ECHO_TIME)
         self.farId = 0
 
-    def _handshake(self, id, payload):
-        if _debug: print '   handshake id=0x%02x'%(id,)
-        if id == 0x30:
+    def _handshake(self, id_, payload):
+        if _debug: print '   handshake id=0x%02x'%(id_,)
+        if id_ == 0x30:
             ignore, epdLen, type = struct.unpack('>BBB', payload[:3])
             epd = payload[3:3+epdLen-1]
             tag = payload[3+epdLen-1:3+epdLen-1+16]
@@ -1977,7 +1977,7 @@ class Handshake(Session):
                 return (0x70, response + cookie + cert)
             else:
                 raise ValueError('unknown handshake type 0x%x'%(type,))
-        elif id == 0x38:
+        elif id_ == 0x38:
             self.farId = struct.unpack('>I', payload[:4])[0]
             cookieId, payload = _unpackString(payload[4:])
             if _debug: print '   Handshake.handshake() farId=%r cookieId=[%d] %r...'%(self.farId, len(cookieId), cookieId[:4])
@@ -2002,7 +2002,7 @@ class Handshake(Session):
             if _debug: print '   handshake response type=0x%02x\n     id=%r\n     server-nonce=%s'%(0x78, cookie.id, truncate(cookie.nonce))
             return (0x78, response)
         else:
-            raise ValueError('unknown handshake packet id 0x%02x'%(id,))
+            raise ValueError('unknown handshake packet id 0x%02x' % id)
 
     def finishHandshake(self, cookie):
         respId, response = 0x78, str(cookie)
@@ -2183,12 +2183,12 @@ class Middle(Session):
 
         remaining = data[index:] # remaining data
         while remaining and ord(remaining[0]) != 0xFF:
-            type, size = struct.unpack('>BH', remaining[:3])
-            if _debug: print '   type=0x%02x'%(type,)
+            _type, size = struct.unpack('>BH', remaining[:3])
+            if _debug: print '   type=0x%02x' %  _type
             content, remaining, newdata = remaining[3:3+size], remaining[3+size:], ''
             if _debug: print '   content=%s'%(truncate(content),)
 
-            if type == 0x10:
+            if _type == 0x10:
                 first, content = content[0], content[1:]
                 idFlow, content = _unpackLength7(content)
                 stage, content = _unpackLength7(content)
@@ -2216,7 +2216,6 @@ class Middle(Session):
                             reader.read(); writer.write(None)
                             while not reader.data.eof():
                                 address = reader.read()
-#                                writer.write(address.rpartition(':')[0] + ':' + str(self.server.sockUdp.getsockaddr()[1]))
                                 writer.write(address.rpartition(':')[0] + ':' + str(self._socket.getsockaddr()[1]))
                         newdata += writer.data.getvalue()
                 else:
@@ -2238,13 +2237,13 @@ class Middle(Session):
                                     break
                             if not found:
                                 if _debug: print 'error: handshake netgroup packet between peers without corresponding group'
-            elif type == 0x4C:
+            elif _type == 0x4C:
                 self.kill()
 
             newdata += content
             if _debug: print '   newdata=%s'%(truncate(newdata),)
-            request += struct.pack('>BH', type, len(newdata)) + newdata
-            if _debug: print '   new request type=0x%02x len=%d'%(type, len(request,))
+            request += struct.pack('>BH', _type, len(newdata)) + newdata
+            if _debug: print '   new request type=0x%02x len=%d' % (_type, len(request))
 
         if len(request) > index:
             self.sendToTarget(request)
