@@ -1770,7 +1770,7 @@ class Session(object):
             if _debug: print '   Session.handle() warning: packet marker unknown 0x%02x'%(marker,)
         if _debug: print '   Session.handle() marker=0x%02x timeSent=%r index=%r'%(marker, self._timeSent, index)
         flags = stage = deltaNack = 0
-        flow, answer = None, False
+        flow = None
         remaining = data[index:] # remaining data
         while remaining and ord(remaining[0]) != 0xFF:
             type, size = struct.unpack('>BH', remaining[:3])
@@ -1787,11 +1787,6 @@ class Session(object):
                 self._timesKeepalive = 0
             elif type == 0x5e:
                 id, message = _unpackLength7(message)
-                #FlowWriter* pFlowWriter = flowWriter(id);
-                #if(pFlowWriter)
-                #	pFlowWriter->fail("receiver has rejected the flow");
-                #else
-                #	WARN("FlowWriter %u unfound for failed signal",id);
             elif type == 0x18:
                 #/// This response is sent when we answer with a Acknowledgment negative
                 #// It contains the id flow
@@ -1802,21 +1797,6 @@ class Session(object):
                 self.fail('ack negative from server')
             elif type == 0x51: # ack
                 id, message = _unpackLength7(message)
-                #FlowWriter* pFlowWriter = flowWriter(id);
-                #if(pFlowWriter) {
-                #        UInt8 ack = message.read8();
-                #        while(ack==0xFF)
-                #                ack = message.read8();
-                #        if(ack>0)
-                #                pFlowWriter->acknowledgment(message.read7BitValue());
-                #        else {
-                #                // In fact here, we should send a 0x18 message (with id flow),
-                #                // but it can create a loop... We prefer the following behavior
-                #                pFlowWriter->fail("ack negative from client");
-                #        }
-                #
-                #} else
-                #        WARN("FlowWriter %u unfound for acknowledgment",id);
             elif type == 0x10: # normal request
                 flags, message = ord(message[0]), message[1:]
                 id, message = _unpackLength7(message)
@@ -1960,24 +1940,35 @@ class Handshake(Session):
         self.farId = 0
 
     def _handshake(self, id_, payload):
-        if _debug: print '   handshake id=0x%02x'%(id_,)
-        if id_ == 0x30:
-            ignore, epdLen, type = struct.unpack('>BBB', payload[:3])
+        # 0x30 => initiator hello
+        # 0x38 => initiator initial keying
+        # 0x70 => responder hello
+        # 0x78 => responder initial keying
+        # |-------------------------------------------------|
+        # | initiator                             responder |
+        # |    | initiator hello -------------------> |     |
+        # |    | <------------------- responder hello |     |
+        # |    | initiator initial keying ----------> |     |
+        # |    | <---------- responder initial keying |     |
+        # |-------------------------------------------------|
+        if _debug: print '   handshake id=0x%02x' % id_
+        if id_ == 0x30: # initiator hello
+            ignore, epdLen, type_ = struct.unpack('>BBB', payload[:3])
             epd = payload[3:3+epdLen-1]
             tag = payload[3+epdLen-1:3+epdLen-1+16]
             response = _packString(tag, 8)
-            if _debug: print '     type=0x%02x\n     epd=%r\n     tag=%r'%(type,epd,tag)
-            if type == 0x0f:
+            if _debug: print '     type=0x%02x\n     epd=%r\n     tag=%r' % (type_, epd, tag)
+            if type_ == 0x0f:
                 respId, resp = self.server.handshakeP2P(tag, self.peer.address, epd)
                 return (respId, response+resp)
-            elif type == 0x0a:
+            elif type_ == 0x0a:
                 cookie = self._createCookie(Cookie(epd))
                 cert = self._certificate
                 if _debug: print '    handshake response type=0x%02x\n     tag=%s\n     cookie=%s\n     cert=%s'%(0x70, truncate(tag), truncate(cookie), truncate(cert))
                 return (0x70, response + cookie + cert)
             else:
-                raise ValueError('unknown handshake type 0x%x'%(type,))
-        elif id_ == 0x38:
+                raise ValueError('unknown handshake type 0x%x' % type_)
+        elif id_ == 0x38: # initiator initial keying
             self.farId = struct.unpack('>I', payload[:4])[0]
             cookieId, payload = _unpackString(payload[4:])
             if _debug: print '   Handshake.handshake() farId=%r cookieId=[%d] %r...'%(self.farId, len(cookieId), cookieId[:4])
