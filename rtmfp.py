@@ -844,6 +844,10 @@ class Publication(object):
     def __init__(self, name):
         self.publisherId, self.name, self._time, self._firstKeyFrame, self._listeners, self.videoQoS, self.audioQoS = 0, name, 0, False, {}, QoS(), QoS()
 
+    def start(self, client, lid):
+        # TODO: seems no use, but it is called by Streams.publish
+        pass
+
     def close(self):
         for item in self._listeners.values():
             item.close()
@@ -914,6 +918,7 @@ class Fragment(object):
     def __init__(self, data, flags):
         self.data, self.flags = data, flags
 
+
 class Message(object):
     def __init__(self, repeatable, data=None, memAck=None):
         self.stream = amf.BytesIO(data) if data else amf.BytesIO()
@@ -922,23 +927,34 @@ class Message(object):
             self._bufferAck, self._memAck = memAck, amf.BytesIO(memAck)
         else:
             self.amfWriter = amf.AMF0(data=self.stream)
+
     def init(self, position):
         self.stream.seek(position)
         return self.stream.remaining() if not self.repeatable else self.stream.len
         raise NotImplementedError('must use the derived class instance')
-    def memAck(self):
-        return self.reader() if self.repeatable else (self._memAck.remaining, self._readerAck)
-    def reader(self):
-        return (self.init(self.fragments and self.fragments[0] or 0), self._reader)
 
+    def memAck(self):
+        if self.repeatable:
+            return self.reader()
+        return self._memAck.remaining, self._reader
+
+    def reader(self):
+        return self.init(self.fragments and self.fragments[0] or 0), self._reader
+
+
+# abstract flow class
 class Flow(object):
     '''Flow serves as base class for individual flow type.
 
     @ivar id (int) flow identifier
     @ivar signature (str) security signature
     '''
+    signature = None # undefined
+
     EMPTY, AUDIO, VIDEO, AMF_WITH_HANDLER, AMF = 0x00, 0x08, 0x09, 0x14, 0x0F
     HEADER, WITH_AFTERPART, WITH_BEFOREPART, ABANDONMENT, END = 0x80, 0x10, 0x20, 0x02, 0x01 # message
+
+
     def __init__(self, id_, signature, peer, server, session):
         self.id, self.peer, self.server, self.session = id_, peer, server, session
         self.error, self.packet, self.stage, self.completed, self.fragments, self.writer = None, None, 0, False, {}, FlowWriter(signature, session)
@@ -951,8 +967,8 @@ class Flow(object):
         self.close()
 
     @property
-    def count(self):
-        return len(self._messages)
+    def count(self): # TODO: seems no use, need check
+        return len(self.writer._messages)
 
     def close(self):
         if not self.completed and self.writer.signature:
@@ -1088,16 +1104,22 @@ class Flow(object):
 
     def messageHandler(self, name, message):
         logging.debug('Flow.messageHandler() unknown message: %r name=0x%02x data=%r'%(self.id, name, message))
+
     def rawHandler(self, type, data):
         logging.debug('Flow.rawHandler() raw unknown message: %r type=0x%02x data=%r'%(self.id, type, data))
+
     def audioHandler(self, packet):
         logging.debug('Flow.audioHandler() audio packet untreated for flow %r'%(self.id,))
+
     def videoHandler(self, packet):
         logging.debug('Flow.videoHandler() video packet untreated for flow %r'%(self.id,))
+
     def lostFragmentsHandler(self, count):
         logging.debug('Flow.lostFragmentsHandler() %d fragments lost on flow %r'%(count, self.id))
+
     def commitHandler(self):
         pass
+
 
 class FlowConnection(Flow):
     signature = '\x00\x54\x43\x04\x00'
@@ -1175,18 +1197,23 @@ class FlowGroup(Flow):
         else:
             Flow.rawHandler(self, type, data)
 
+
 class FlowNull(Flow):
     def __init__(self, peer, server, session):
         Flow.__init__(self, id, '', peer, server, session)
+
     def close(self):
         Flow.close(self)
+
     def fragmentHandler(self, stage, deltaNack, fragment, flags):
         self.fail('message received for an unknown flow')
         self.stage = stage
 
+
 class FlowStream(Flow):
     signature = '\x00\x54\x43\x04'
-    IDLE, PUBLISHING, PLAYING = range(3)
+    IDLE, PUBLISHING, PLAYING = 0, 1, 2
+
     def __init__(self, id, signature, peer, server, session):
         Flow.__init__(self, id, signature, peer, server, session)
         self._state, self._isVideo, self._lostFragments = FlowStream.IDLE, False, 0
@@ -1270,6 +1297,7 @@ class FlowStream(Flow):
         else:
             Flow.messageHandler(self, action, msg)
 
+
 class FlowWriter(object):
     def __init__(self, signature, session):
         self.id = self.flowId = self.stage = self._lostMessages = self.callbackHandle = self._resetCount = 0
@@ -1286,7 +1314,7 @@ class FlowWriter(object):
 
     def clearMessages(self, exceptLast=False): # TODO: this is also the destructor
         while len(self._messages) > (exceptLast and 1 or 0):
-            m = self._messages.pop(0) # TODO: no destructor found
+            self._messages.pop(0) # TODO: no destructor found
             self._lostMessages += 1
         if not self._messages:
             self._trigger.stop()
@@ -1312,11 +1340,14 @@ class FlowWriter(object):
     @property
     def count(self):
         return len(self._messages)
+
     @property
     def consumed(self):
         return self.closed and not self._messages
+
     def ackMessageHandler(self, content, size, lostMessages):
         pass
+
     def acknowledgment(self, stage):
         if stage > self.stage:
             logging.debug('FlowWriter.fail() ack received higher than current sending stage: %d instead of %d'%(stage, self.stage))
