@@ -447,15 +447,19 @@ try:
     class AESEncrypt(object):
         def __init__(self, key):
             self.key = key[:16]
-            self.iv = ''.join(['\x00' for i in xrange(16)]) # create null-IV
+            self.iv = '\x00' * 16 # create null-IV
+
         def encode(self, data):
             self.cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
             result = self.cipher.encrypt(data)
             return result
+
+
     class AESDecrypt(object):
         def __init__(self, key):
             self.key = key[:16]
-            self.iv = ''.join(['\x00' for i in xrange(16)]) # create null-IV
+            self.iv = '\x00' * 16 # create null-IV
+
         def decode(self, data):
             self.cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
             result = self.cipher.decrypt(data)
@@ -530,7 +534,7 @@ def _address2str(value, hasPort=True):
 
 def _ipport2address(value):
     '''Parse a string of the form "dotted-ip:port" to ("dotted-ip", port).'''
-    ip, ignore, port = value.rpartition(':')
+    ip, _, port = value.rpartition(':')
     return (ip, int(port) if port else 0)
 
 def _address2ipport(address, default_port=1935):
@@ -616,7 +620,7 @@ def _decode(decoder, data):
 
 def _encode(encoder, data):
     plen = (0xffffffff - len(data) + 5) & 0x0f # 4-bytes header, plen = 16*N - len for some int N and 0 <= plen < 16 (128 bits)
-    data += ''.join(['\xff' for i in xrange(plen)])
+    data += '\xff' * plen
     data = data[:4] + struct.pack('>H', _checkSum(data[6:])) + data[6:]
     return data[:4] + encoder.encode(data[4:])
 
@@ -839,6 +843,9 @@ class QoS(object):
         self.droppedFrames = self.lossRate = self.jitter = self.prevTime = self.reception = 0
         self.samples[:] = []
 
+    def reset(self):
+        self.close()
+
 
 class Publication(object):
     def __init__(self, name):
@@ -931,7 +938,6 @@ class Message(object):
     def init(self, position):
         self.stream.seek(position)
         return self.stream.remaining() if not self.repeatable else self.stream.len
-        raise NotImplementedError('must use the derived class instance')
 
     def memAck(self):
         if self.repeatable:
@@ -1151,7 +1157,7 @@ class FlowConnection(Flow):
         elif name == 'setPeerInfo':
             try:
                 self.peer.privateAddress[:] = []
-                ignore = reader.read()
+                reader.read()
                 while True:
                     address = reader.read()
                     self.peer.privateAddress.append(_ipport2address(address))
@@ -1217,7 +1223,7 @@ class FlowStream(Flow):
     def __init__(self, id, signature, peer, server, session):
         Flow.__init__(self, id, signature, peer, server, session)
         self._state, self._isVideo, self._lostFragments = FlowStream.IDLE, False, 0
-        self._index, remaining = _unpackLength7(signature[4:])
+        self._index, _ = _unpackLength7(signature[4:])
         self._publication = self.server.streams.publications(self._index)
 
     def close(self):
@@ -1225,10 +1231,10 @@ class FlowStream(Flow):
         self.disengage()
 
     def disengage(self):
-        if self.state == FlowStream.PUBLISHING:
+        if self._state == FlowStream.PUBLISHING:
             self.server.streams.unpublish(self.peer, self._index, self.name)
             self.writer.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Unpublish.Success', description="'%s' is now unpublished"%(self.name,)))
-        elif self.state == FlowStream.PLAYING:
+        elif self._state == FlowStream.PLAYING:
             self.server.streams.unsubscribe(self.peer, self._index, self.name)
             self.writer.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Play.Stop', description="Stopped playing '%s'"%(self.name,)))
         self.state = FlowStream.IDLE
@@ -1265,7 +1271,8 @@ class FlowStream(Flow):
 
     def messageHandler(self, action, msg):
         if action == '|RtmpSampleAccess':
-            value1, value2 = msg.read(), msg.read()
+            msg.read()
+            msg.read()
         elif action == 'play':
             self.disengage()
             self._state = FlowStream.PLAYING
@@ -1293,7 +1300,7 @@ class FlowStream(Flow):
                 self.writer.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Publish.Start', description='"%s" is now published'%(self.name,)))
                 self._state = FlowStream.PUBLISHING
             else:
-                self.write.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Publish.BadName', description='"%s" is already publishing'%(self.name,)))
+                self.writer.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Publish.BadName', description='"%s" is already publishing'%(self.name,)))
         else:
             Flow.messageHandler(self, action, msg)
 
@@ -1336,6 +1343,10 @@ class FlowWriter(object):
         self.stage = 0
         self._resetCount += 1
         self.reset(self._resetCount)
+
+    def reset(self, count):
+        # TODO:
+        pass
 
     @property
     def count(self):
@@ -1517,30 +1528,36 @@ class StreamWriter(FlowWriter):
     def __init__(self, type, signature, session):
         FlowWriter.__init__(self, signature, session)
         self.type, self.reseted, self.qos = type, False, QoS()
+
     def write(self, tm, data, unbuffered):
         if unbuffered:
             if len(data) >= 5:
-                message = self.createMessage(buffered=False, data=data[:5] + struct.pack('>BI', self.type, tm) + data[5:])
+                self.createMessage(buffered=False, data=data[:5] + struct.pack('>BI', self.type, tm) + data[5:]) # XXX: no used
                 self.flush()
                 return
             self.writeRawMessage(struct.pack('>BI', self.type, tm) + data, True)
+
     def ackMessageHandler(self, content, lostMessages):
         type = ord(content[0])
         if type != self.type:
             return
         tm = struct.unpack('>I', content[1:5])[0]
         self.qos.add(tm, 1, lostMessages)
+
     def reset(self, count):
         self.reseted = True
         self.qos.reset()
+
 
 class AudioWriter(StreamWriter):
     def __init__(self, signature, session):
         StreamWriter.__init__(self, 0x08, signature, session)
 
+
 class VideoWriter(StreamWriter):
     def __init__(self, signature, session):
         StreamWriter.__init__(self, 0x09, signature, session)
+
 
 class Listener(object):
     def __init__(self, id, publication, writer, unbuffered):
@@ -1553,12 +1570,15 @@ class Listener(object):
     def close(self):
         self._audioWriter.close()
         self._videoWriter.close()
+
     @property
     def audioQoS(self):
         return self._audioWriter.qos
+
     @property
     def videoQoS(self):
         return self._videoWriter.qos
+
     def computeTime(self, tm):
         if tm == 0:
             tm = 1
@@ -1568,24 +1588,29 @@ class Listener(object):
         if self._deltaTime > tm:
             logging.debug('Listener.computeTime() time lower than deltaTime on listener %d'%(self.id,), tm, self._deltaTime)
             self._deltaTime = tm
-        self._time = tm - self.deltaTime + self._addingTime
+        self._time = tm - self._deltaTime + self._addingTime
         return self._time
+
     def writeBound(self, writer):
         logging.debug('Listener.writeBound() writing bound %d on flow writer %d'%(self._boundId, writer.id))
         writer.writeRawMessage(struct.pack('>HII', 0x22, self._boundId, 3)) # 3 tracks
+
     def writeBounds(self):
         self.writeBound(self._videoWriter)
         self.writeBound(self._audioWriter)
-        self.writeBound(self._writer)
+        self.writeBound(self.writer)
         self._boundId += 1
+
     def startPublishing(self, name):
         self.writer.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Play.PublishNotify', description='"%s" is now published'%(name,)))
         self._firstKeyFrame = False
+
     def stopPublishing(self, name):
         self.writer.writeAMFMessage('onStatus', amf.Object(level='status', code='NetStream.Play.UnpublishNotify', description='"%s" is now unpublished'%(name,)))
         self._deltaTime, self._addingTime = 0, self._time
         self._audioWriter.qos.reset()
         self._videoWriter.qos.reset()
+
     def pushVideoPacket(self, tm, data):
         if ord(data[0]) & 0xf0 == 0x10: # key frame
             self._firstKeyFrame = True
@@ -1597,15 +1622,17 @@ class Listener(object):
             self._videoWriter.reseted = False
             self.writeBounds()
         self._videoWriter.write(self.computeTime(tm), data, self.unbuffered)
+
     def pushAudioPacket(self, tm, data):
         if self._audioWriter.reseted:
             self._audioWriter.reseted = False
             self.writeBounds()
         self._audioWriter.write(self.computeTime(tm), data, self.unbuffered)
+
     def flush(self):
         self._audioWriter.flush()
         self._videoWriter.flush()
-        self._writer.flush()
+        self.writer.flush()
 
 
 #--------------------------------------
@@ -1673,7 +1700,7 @@ class Session(object):
     def close(self):
         self.kill()
         if self.peer.state != 'none':
-            logging.debug('onDisconnect client handler has not been called on the session', self.id)
+            logging.debug('onDisconnect client handler has not been called on the session "%s"' % self.id)
         for flow in self._flows.itervalues():
             flow.close()
 
@@ -1777,18 +1804,21 @@ class Session(object):
             symmetric = flags & self.SYMMETRIC_ENCODING
             marker = symmetric and 0x0b or 0x4a
             logging.debug('   Session.flush() timeEcho=%r symmetric=%r marker=0x%02x'%(timeEcho, symmetric, marker))
-            offset = 0 if timeEcho else 2
-            if timeEcho: marker += 4
-            data = '\x00'*6 + struct.pack('>BH', marker, int(now*1000/4) & 0xffff) + (struct.pack('>H', self._timeSent + (int((now - self._recvTs)*1000/4) & 0xffff)) if timeEcho else '') + data
+            if timeEcho:
+                marker += 4
+            data = '\x00' * 6 + \
+                    struct.pack('>BH', marker, int(now*1000/4) & 0xffff) + \
+                    (struct.pack('>H', self._timeSent + (int((now - self._recvTs)*1000/4) & 0xffff)) if timeEcho else '') + \
+                    data
             logging.debug('   Session.flush() encoding [%d]\n   %s'%(len(data[6:]), truncate(data[6:], size=100)))
             data = _encode(self._aesEncrypt, data)
             logging.debug('   session.id=%r'%(self.farId,))
             data = _packId(data, self.farId)
-            for i in range(2):
+            for _ in (0, 1, 2):
                 if len(data) == self.server.send(data, self.peer.address):
                      break
             else:
-                logging.debug('Session.flush() socket send error on sessin %u, all data was not sent'%(self.id,))
+                logging.debug('Session.flush() socket send error on sessin %u, all data was not sent' % self.id)
             if not message:
                 self._writer.clear()
 
@@ -1882,7 +1912,7 @@ class Session(object):
                         if fullduplex != 0x0A:
                             logging.debug('Session.handle() warning: unknown full duplex header 0x%02x for flow %u' % (fullduplex, id_))
                         else:
-                            ignore, message = _unpackLength7(message)
+                            _, message = _unpackLength7(message)
                         length, message = ord(message[0]), message[1:]
                         while length > 0 and message:
                             logging.debug('Session.handle() warning: unknown message part on flow %u' % id_)
@@ -1892,8 +1922,6 @@ class Session(object):
                             logging.debug('Session.handle() error: bad header message part, finished before scheduled')
                 if not flow:
                     logging.debug('Session.handle() warning: flow %u not found' % id_)
-                    self._flowNull.id = id_
-                    flow = self._flowNull
             elif type_ != 0x11:
                 logging.debug('Session.handle() error: unknown message type 0x%02x' % type_)
 
@@ -1921,8 +1949,6 @@ class Session(object):
         result = self._flows.get(id_, None)
         if not result:
             logging.debug('Session.flow() flow %r not found' % id_)
-            self._flowNull.id = id_
-            result = self._flowNull
         return result
 
     def createFlow(self, id_, signature):
@@ -2021,7 +2047,7 @@ class Handshake(Session):
         # |-------------------------------------------------|
         logging.debug('   handshake id=0x%02x' % id_)
         if id_ == 0x30: # initiator hello
-            ignore, epdLen, type_ = struct.unpack('>BBB', payload[:3])
+            _, epdLen, type_ = struct.unpack('>BBB', payload[:3])
             epd = payload[3:3+epdLen-1]
             tag = payload[3+epdLen-1:3+epdLen-1+16]
             response = _packString(tag, 8)
@@ -2080,7 +2106,7 @@ class Middle(Session):
     def __init__(self, server, id, farId, peer, dKey, eKey, sessions, target):
         Session.__init__(self, server, id, farId, peer, dKey, eKey)
         self.sessions, self.target, self.middlePeer = sessions, target, peer
-        self._isPeer, self._middleId, self._firstResponse, self._queryUrl, self._span = target.isPeer, 0, False, 'rtmfp://%s%s'%(_address2ipport(target.address), peer.path), 0
+        self._isPeer, self._middleId, self._firstResponse, self._queryUrl, self._span = target.isPeer, 0, False, 'rtmfp://%s%s' % (_address2ipport(target.address), peer.path), 0
         self._middleAesDecrypt = self._middleAesEncrypt = self._middleDH = self._targetNonce = self._sharedSecret = None
 
         self._socket = socket.socket(type=socket.SOCK_DGRAM)
@@ -2090,13 +2116,12 @@ class Middle(Session):
 
         self.middlePeer.path, self.middlePeer.parameters = _url2pathquery(self._queryUrl)
         self._middleCert = '\x02\x1D\x02\x41\x0E' + _random(64) + '\x03\x1A\x02\x0A\x02\x1E\x02' # 5+64+7=76 bytes
-#        self._pending = [] # list of pending messages from initiator before handshake with terminator is complete
         if self._isPeer:
             self._middleDH, self.middlePeer.id = self.target.DH, self.target.id
             packet = '\x22\x21\x0F' + target.peerId
             logging.debug('   target-handshake type=0x%02x\n     peerId=%s'%(0x30, truncate(target.peerId)))
         else:
-            packet = struct.pack('>BBB', len(self._queryUrl)+2, len(self._queryUrl)+1, 0x0A) + self._queryUrl;
+            packet = struct.pack('>BBB', len(self._queryUrl)+2, len(self._queryUrl)+1, 0x0A) + self._queryUrl
             logging.debug('   target-handshake type=0x%02x\n     queryUrl=%r'%(0x30, self._queryUrl))
         packet += _random(16)
         logging.debug('     random=%r'%(packet[-16:],))
@@ -2131,16 +2156,16 @@ class Middle(Session):
                     logging.debug('error: middle from %r: invalid packet size %r'%(remote, len(data)))
                     continue
                 id = _unpackId(data)
-                logging.debug('   session.id=%r middleAesDecrypt=%r'%(id, bool(self._middleAesDecrypt)))
+                logging.debug('   session.id=%r middleAesDecrypt=%r' % (id, bool(self._middleAesDecrypt)))
                 if id == 0 or not self._middleAesDecrypt:
                     data = _decode(self.server._handshake._aesDecrypt, data)
                     logging.debug('   middle handshaking')
                     if ord(data[6]) != 0x0B:
                         logging.debug('target handshake received with non 0x0b marker %02x'%(ord(data[6]),))
                     else:
-                        marker, tm, type, size = struct.unpack('>BHBH', data[6:12])
+                        type_, size = struct.unpack('>BH', data[9:12])
                         content = data[12:12+size]
-                        self.targetHandshakeHandler(type, content)
+                        self.targetHandshakeHandler(type_, content)
                 else:
                     data = _decode(self._middleAesDecrypt, data)
                     logging.debug('   middle packet decoded\n   %s'%(truncate(data[6:], 200),))
@@ -2184,7 +2209,6 @@ class Middle(Session):
                 self._sharedSecret = _int2bin(_endDH(self._middleDH[0], _bin2int(data[:128])), 128)
                 logging.debug('   shared secret %s'%(truncate(self._sharedSecret),))
             else:
-                targetCert = data[:]
                 self._middleDH = _beginDH()
                 nonce += self._middleDH[1]
                 self.middlePeer.id = hashlib.sha256(nonce).digest()
@@ -2194,7 +2218,6 @@ class Middle(Session):
         elif type == 0x71:
             tag, data = _unpackString(data, 8)
             if self._middleAesDecrypt:
-                response = struct.pack('>BH', 0x71, len(data)+len(tag)+1) + _packString(tag) + data
                 farId, self.farId = self.farId, 0
                 self.flush(Session.SYMMETRIC_ENCODING | Session.WITHOUT_ECHO_TIME)
                 self.farId = farId
@@ -2274,7 +2297,7 @@ class Middle(Session):
                             reader.read(); writer.write(None)
                             while not reader.data.eof():
                                 address = reader.read()
-                                writer.write(address.rpartition(':')[0] + ':' + str(self._socket.getsockaddr()[1]))
+                                writer.write(address.rpartition(':')[0] + ':' + str(self._socket.getsockname()[1]))
                         newdata += writer.data.getvalue()
                 else:
                     if idFlow == 0x02 and stage == 0x01:
@@ -2287,7 +2310,7 @@ class Middle(Session):
                             for group in self.server.groups:
                                 if group.hasPeer(self.target.id):
                                     result1 = hmac.new(self._sharedSecret, self._targetNonce, hashlib.sha256).digest()
-                                    result2 = hmac.new(group.id, result1[:32])
+                                    result2 = hmac.new(group.id, result1[:32]).digest()
                                     newdata, content = newdata + result2[:32], content[32:]
                                     newdata, content = newdata + content[:4], content[4:]
                                     newdata, content = newdata + self.target.peerId, content[32:]
@@ -2310,7 +2333,7 @@ class Middle(Session):
         if self._firstResponse:
             self._recvTs = time.time()
         self._firstResponse, index = False, 3
-        marker, ts = struct.unpack('>BH', data[:3])
+        marker, _ = struct.unpack('>BH', data[:3])
         if marker | 0xF0 == 0xFE:
             self._timeSent, index = struct.unpack('>H', data[3:5])[0], 5
         idFlow = stage = nbPeerSent = 0
@@ -2366,10 +2389,10 @@ class Middle(Session):
                                 for group in self.server.groups:
                                     if group.hasPeer(self.target.id):
                                         result1 = hmac.new(self._sharedSecret, self.target.initNonce, hashlib.sha256).digest()
-                                        result2 = hmac.new(group.id, result1[:32])
+                                        result2 = hmac.new(group.id, result1[:32]).digest()
                                         request, content = request + result2[:32], content[32:]
                                         request, content = request + content[:4], content[4:]
-                                        request, content = request + self.peerId, content[32:]
+                                        request, content = request + self.target.peerId, content[32:]
                                         found = True
                                         break
                                 if not found:
@@ -2436,7 +2459,7 @@ class FlashServer(object):
                 data, remote = yield multitask.recvfrom(self.sockUdp, max_size)
                 logging.debug('<= %s:%d [%d]' % (remote[0], remote[1], len(data)))
                 if len(data) < 12:
-                    logging.debug('FlashServer.serverudplistener() invalid packet of length', len(data))
+                    logging.debug('FlashServer.serverudplistener() invalid packet of length %d' % len(data))
                 else:
                     sessionId = _unpackId(data)
                     if sessionId not in self.sessions:
@@ -2453,17 +2476,17 @@ class FlashServer(object):
                             raise
                         except StopIteration:
                             raise
-                        except:
-                            logging.debug('FlashServer.serverudplistener() session exception', traceback.print_exc())
+                        except Exception as err:
+                            logging.error('FlashServer.serverudplistener() session error: %s' % err)
         except GeneratorExit:
             pass # terminate
         except StopIteration:
             raise
-        except:
-            logging.debug('FlashServer.serverudplistener() exception', traceback.print_exc())
+        except Exception as err:
+            logging.debug('FlashServer.serverudplistener() error: %s' % err)
 
     def send(self, data, remote): # a wrapper around socket.sendto for local UDP socket
-        logging.debug('=> %s:%d [%d]'%(remote[0], remote[1], len(data)))
+        logging.debug('=> %s:%d [%d]' % (remote[0], remote[1], len(data)))
         return self.sockUdp.sendto(data, remote)
 
     def group(self, id):
@@ -2519,7 +2542,7 @@ class FlashServer(object):
             return (0, '')
 
         if self.middle:
-            logging.debug('   p2p-handshake processing middle mode target=', sessionWanted._target)
+            logging.debug('   p2p-handshake processing middle mode target=%s' % sessionWanted._target)
             if sessionWanted._target:
                 cookieId = self._handshake._createCookie(Cookie(sessionWanted._target))
                 response = cookieId + '\x81\x02\x1D\x02' + sessionWanted._target.Kp
@@ -2621,7 +2644,7 @@ if __name__ == '__main__':
             format='%(asctime)s %(levelname)6s %(message)s',
             stream=sys.stdout)
     if options.cirrus:
-        logging.info('main() using cirrus', options.cirrus)
+        logging.info('main() using cirrus ' + options.cirrus)
         options.freq_manage = 0
     if options.keep_alive_server < 5: options.keep_alive_server = 5
     if options.keep_alive_peer < 5: options.keep_alive_peer = 5
