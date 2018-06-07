@@ -115,7 +115,6 @@ class AMF0(object):
         return obj
 
     def read(self):
-        global undefined
         marker = self.data.read_u8()
         if   marker == AMF0.NUMBER:   return self.data.read_double()
         elif marker == AMF0.BOOL:     return bool(self.data.read_u8())
@@ -137,7 +136,6 @@ class AMF0(object):
         else: raise ValueError('Invalid AMF0 marker 0x%02x at %d' % (marker, self.data.tell()-1))
 
     def write(self, data):
-        global undefined
         if   data is None:                         self.data.write_u8(AMF0.NULL)
         elif data == undefined:                    self.data.write_u8(AMF0.UNDEFINED)
         elif isinstance(data, bool):               self.data.write_u8(AMF0.BOOL); self.data.write_u8(1 if data else 0)
@@ -276,7 +274,6 @@ class AMF3(object):
         self.data = data if isinstance(data, BytesIO) else BytesIO(data) if data is not None else BytesIO()
 
     def read(self):
-        global undefined
         type = self.data.read_u8()
         if   type == AMF3.UNDEFINED:  return undefined
         elif type == AMF3.NULL:       return None
@@ -294,7 +291,6 @@ class AMF3(object):
         else: raise ValueError('Invalid AMF3 type 0x%02x at %d' % (type, self.data.tell()-1))
 
     def write(self, data):
-        global undefined
         if data is None:              self.data.write_u8(AMF3.NULL)
         elif data == undefined:       self.data.write_u8(AMF3.UNDEFINED)
         elif isinstance(data, bool):  self.data.write_u8(AMF3.BOOL_FALSE if data is False else AMF3.BOOL_TRUE)
