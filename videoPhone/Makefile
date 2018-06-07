@@ -3,7 +3,7 @@ MXMLC:=/Applications/Adobe\ Flash\ Builder\ 4/sdks/3.5/bin/mxmlc
 
 all: bin-release/VideoPhone.swf bin-release/VideoPhone45.swf bin-release/VideoPhone11.swf
 
-clean: 
+clean:
 	rm -f bin-release/VideoPhone.swf bin-release/VideoPhone45.swf bin-release/VideoPhone11.swf
 
 bin-release/VideoPhone.swf:
