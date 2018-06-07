@@ -1,6 +1,6 @@
 # Copyright (c) 2011, Kundan Singh. All rights reserved. see README for details.
-# 
-# Implementation of 
+#
+# Implementation of
 # http://opensource.adobe.com/wiki/download/attachments/1114283/amf0_spec_121207.pdf
 # http://opensource.adobe.com/wiki/download/attachments/1114283/amf3_spec_121207.pdf
 
@@ -23,51 +23,84 @@ undefined = _Undefined()  # received undefined is different from null (None)
 
 
 class BytesIO(StringIO): # raise EOFError if needed, allow read with optional length, and peek next byte
-    def __init__(self, *args, **kwargs): StringIO.__init__(self, *args, **kwargs)
-    def eof(self): return self.tell() >= self.len  # return true if next read will cause EOFError
-    def remaining(self): return self.len - self.tell() # return number of remaining bytes
-    
+    def __init__(self, *args, **kwargs):
+        StringIO.__init__(self, *args, **kwargs)
+
+    def eof(self):
+        return self.tell() >= self.len  # return true if next read will cause EOFError
+
+    def remaining(self):
+        return self.len - self.tell() # return number of remaining bytes
+
     def read(self, length=-1):
-        if length > 0 and self.eof(): raise EOFError # raise error if reading beyond EOF
-        if length > 0 and self.tell() + length > self.len: length = self.len - self.tell() # don't read more than available bytes
+        if length > 0 and self.eof():
+            raise EOFError # raise error if reading beyond EOF
+        if length > 0 and self.tell() + length > self.len:
+            length = self.len - self.tell() # don't read more than available bytes
         return StringIO.read(self, length)
+
     def peek(self):
-        if self.eof(): return None
-        else:
-            c = self.read(1)
-            self.seek(self.tell()-1)
-            return c
-        
+        if self.eof():
+            return None
+
+        c = self.read(1)
+        self.seek(self.tell()-1)
+        return c
+
     for type, T, bytes in (('u8', 'B', 1), ('s8', 'b', 1), ('u16', 'H', 2), ('s16', 'h', 2), ('u32', 'L', 4), ('s32', 'l', 4), ('double', 'd', 8)):
         exec '''def read_%s(self): return struct.unpack("!%s", self.read(%d))[0]'''%(type, T, bytes)
         exec '''def write_%s(self, c): self.write(struct.pack("!%s", c))'''%(type, T)
-        
-    def read_utf8(self, length): return unicode(self.read(length), 'utf8')
-    def write_utf8(self, c): self.write(c.encode('utf8'))
-    
+
+    def read_utf8(self, length):
+        return unicode(self.read(length), 'utf8')
+
+    def write_utf8(self, c):
+        self.write(c.encode('utf8'))
+
     def read_u29(self):
         n = result = 0; b = self.read_u8()
-        while b & 0x80 and n < 3: result <<= 7; result |= b & 0x7f; b = self.read_u8(); n += 1
-        if n < 3: result <<= 7; result |= b
-        else: result <<= 8; result |= b
+        while b & 0x80 and n < 3:
+            result <<= 7
+            result |= b & 0x7f
+            b = self.read_u8()
+            n += 1
+        if n < 3:
+            result <<= 7
+            result |= b
+        else:
+            result <<= 8
+            result |= b
+
         assert result & 0xe0000000 == 0
         return result
+
     def read_s29(self):
         result = self.read_u29()
-        if result & 0x10000000: result -= 0x20000000
+        if result & 0x10000000:
+            result -= 0x20000000
         return result
+
     def write_u29(self, c):
-        if c < 0 or c > 0x1fffffff: raise ValueError('uint29 out of range')
+        if c < 0 or c > 0x1fffffff:
+            raise ValueError('uint29 out of range')
         bytes = ''
-        if c >= 0x200000: bytes += chr(0x80 | ((c >> 22) & 0x7f))
-        if c >= 0x4000: bytes += chr(0x80 | ((c >> 15) & 0x7f))
-        if c >= 0x80: bytes += chr(0x80 | ((c >> 8) & 0x7f))
-        if c >= 0x200000: bytes += chr(c & 0xff)
-        else: bytes += chr(c & 0x7f)
+        if c >= 0x200000:
+            bytes += chr(0x80 | ((c >> 22) & 0x7f))
+        if c >= 0x4000:
+            bytes += chr(0x80 | ((c >> 15) & 0x7f))
+        if c >= 0x80:
+            bytes += chr(0x80 | ((c >> 8) & 0x7f))
+        if c >= 0x200000:
+            bytes += chr(c & 0xff)
+        else:
+            bytes += chr(c & 0x7f)
         self.write(bytes)
+
     def write_s29(self, c):
-        if c < -0x10000000 or c > 0x0fffffff: raise ValueError('sint29 out of range')
-        if c < 0: c += 0x20000000
+        if c < -0x10000000 or c > 0x0fffffff:
+            raise ValueError('sint29 out of range')
+        if c < 0:
+            c += 0x20000000
         self.write_u29(c)
 
 
@@ -76,8 +109,11 @@ class AMF0(object):
 
     def __init__(self, data=None):
         self._obj_refs, self.data = list(), data if isinstance(data, BytesIO) else BytesIO(data) if data is not None else BytesIO()
+
     def _created(self, obj): # new object-reference is created
-        self._obj_refs.append(obj); return obj
+        self._obj_refs.append(obj)
+        return obj
+
     def read(self):
         global undefined
         marker = self.data.read_u8()
@@ -90,7 +126,7 @@ class AMF0(object):
         elif marker == AMF0.UNDEFINED:return undefined
         elif marker == AMF0.REFERENCE:return self.readReference()
         elif marker == AMF0.ECMA_ARRAY:return self.readEcmaArray()
-        elif marker == AMF0.ARRAY:    return self.readArray() 
+        elif marker == AMF0.ARRAY:    return self.readArray()
         elif marker == AMF0.DATE:     return self.readDate()
         elif marker == AMF0.LONG_STRING:return self.readLongString()
         elif marker == AMF0.UNSUPPORTED:return None
@@ -99,7 +135,7 @@ class AMF0(object):
         elif marker == AMF0.TYPED_OBJECT: return self.readTypedObject()
         elif marker == AMF0.TYPE_AMF3: return AMF3(self.data).read()
         else: raise ValueError('Invalid AMF0 marker 0x%02x at %d' % (marker, self.data.tell()-1))
-        
+
     def write(self, data):
         global undefined
         if   data is None:                         self.data.write_u8(AMF0.NULL)
@@ -116,89 +152,125 @@ class AMF0(object):
         else: raise ValueError('Invalid AMF0 data %r type %r' % (data, type(data)))
 
     def readString(self): return self.data.read_utf8(self.data.read_u16())
+
     def readLongString(self): return self.data.read_utf8(self.data.read_u32())
+
     def writeString(self, data, writeType=True):
         data = unicode(data).encode('utf8') if isinstance(data, unicode) else data
         if writeType: self.data.write_u8(AMF0.LONG_STRING if len(data) > 0xffff else AMF0.STRING)
         if len(data) > 0xffff: self.data.write_u32(len(data))
         else: self.data.write_u16(len(data))
         self.data.write(data)
-        
+
     def readObject(self):
         obj, key = self._created(Object()), self.readString()
         while key != '' or self.data.peek() != chr(AMF0.OBJECT_END):
             setattr(obj, key, self.read()); key = self.readString()
         self.data.read(1) # discard OBJECT_END
         return obj
+
     def writeObject(self, data):
         if not self.writePossibleReference(data):
             self.data.write_u8(AMF0.OBJECT)
-            for key, val in data.__dict__.items(): 
-                if not key.startswith('_'): self.writeString(key, False); self.write(val)
-            self.writeString('', False); self.data.write_u8(AMF0.OBJECT_END)
+            for key, val in data.__dict__.items():
+                if not key.startswith('_'):
+                    self.writeString(key, False)
+                    self.write(val)
+            self.writeString('', False)
+            self.data.write_u8(AMF0.OBJECT_END)
 
-    def readReference(self): 
-        try: return self._obj_refs[self.data.read_u16()]
-        except IndexError: raise ValueError('invalid reference index')
+    def readReference(self):
+        try:
+            return self._obj_refs[self.data.read_u16()]
+        except IndexError:
+            raise ValueError('invalid reference index')
+
     def writePossibleReference(self, data):
-        if data in self._obj_refs: self.data.write_u8(AMF0.REFERENCE); self.data.write_u16(self._obj_refs.index(data)); return True
-        elif len(self._obj_refs) < 0xfffe: self._obj_refs.append(data)
-    
+        if data in self._obj_refs:
+            self.data.write_u8(AMF0.REFERENCE)
+            self.data.write_u16(self._obj_refs.index(data))
+            return True
+        elif len(self._obj_refs) < 0xfffe:
+            self._obj_refs.append(data)
+
     def readEcmaArray(self):
-        len_ignored = self.data.read_u32()
+        self.data.read_u32()
         obj, key = self._created(dict()), self.readString()
         while key != '' or self.data.peek() != chr(AMF0.OBJECT_END):
             obj[int(key) if key.isdigit() else key] = self.read(); key = self.readString()
         self.data.read(1) # discard OBJECT_END
         return obj
+
     def writeEcmaArray(self, data):
         if not self.writePossibleReference(data):
-            self.data.write_u8(AMF0.ECMA_ARRAY); self.data.write_u32(len(data))
-            for key, val in data.items(): self.writeString(key, writeType=False); self.write(val)
-            self.writeString('', writeType=False); self.data.write_u8(AMF0.OBJECT_END)
-         
+            self.data.write_u8(AMF0.ECMA_ARRAY)
+            self.data.write_u32(len(data))
+            for key, val in data.items():
+                self.writeString(key, writeType=False)
+                self.write(val)
+            self.writeString('', writeType=False)
+            self.data.write_u8(AMF0.OBJECT_END)
+
     def readArray(self):
         count, obj = self.data.read_u32(), self._created([])
-        obj.extend(self.read() for i in xrange(count)) 
+        obj.extend(self.read() for _ in xrange(count))
         return obj
+
     def writeArray(self, data):
         if not self.writePossibleReference(data):
-            self.data.write_u8(AMF0.ARRAY); self.data.write_u32(len(data))
-            for val in data: self.write(val)
-    
+            self.data.write_u8(AMF0.ARRAY)
+            self.data.write_u32(len(data))
+            for val in data:
+                self.write(val)
+
     def readDate(self):
         ms, tz = self.data.read_double(), self.data.read_s16()
         class TZ(datetime.tzinfo):
-            def utcoffset(self, dt): return datetime.timedelta(minutes=tz)
-            def dst(self,dt): return None
-            def tzname(self,dt): return None
+            def utcoffset(self, dt):
+                return datetime.timedelta(minutes=tz)
+            def dst(self,dt):
+                return None
+            def tzname(self,dt):
+                return None
         return datetime.datetime.fromtimestamp(ms/1000.0, TZ())
-    def writeDate(self, data):
-        if isinstance(data, datetime.date): data = datetime.datetime.combine(data, datetime.time(0))
-        self.data.write_u8(AMF0.DATE); ms = time.mktime(data.timetuple)
-        tz = 0 if not data.tzinfo else (data.tzinfo.utcoffset.days*1440 + data.tzinfo.utcoffset.seconds/60)
-        self.data.write_double(ms); self.data.write_s16(tz)
 
-    def readXML(self): return ET.fromstring(self.readLongString())
+    def writeDate(self, data):
+        if isinstance(data, datetime.date):
+            data = datetime.datetime.combine(data, datetime.time(0))
+        self.data.write_u8(AMF0.DATE)
+        ms = time.mktime(data.timetuple)
+        tz = 0 if not data.tzinfo else (data.tzinfo.utcoffset.days*1440 + data.tzinfo.utcoffset.seconds/60)
+        self.data.write_double(ms)
+        self.data.write_s16(tz)
+
+    def readXML(self):
+        return ET.fromstring(self.readLongString())
+
     def writeXML(self, data):
         data = ET.tostring(data, 'utf8')
-        self.data.write_u8(AMF0.XML); self.data.write_u32(len(data)); self.data.write(data)
-    
-    def readTypedObject(self): 
-        classname = self.readString(); obj = self.readObject(); obj._classname = classname; return obj
+        self.data.write_u8(AMF0.XML)
+        self.data.write_u32(len(data))
+        self.data.write(data)
+
+    def readTypedObject(self):
+        classname = self.readString()
+        obj = self.readObject()
+        obj._classname = classname
+        return obj
+
     def writeTypedObject(self, data):
         if not self.writePossibleReference(data):
             self.data.write_u8(AMF0.TYPED_OBJECT)
             self.data.writeString(data._classname)
-            for key, val in data.__dict__.items(): 
+            for key, val in data.__dict__.items():
                 if not key.startswith('_'): self.writeString(key, False); self.write(val)
             self.writeString('', False); self.data.write_u8(AMF0.OBJECT_END)
 
-    
+
 class AMF3(object):
     UNDEFINED, NULL, BOOL_FALSE, BOOL_TRUE, INTEGER, NUMBER, STRING, XML, DATE, ARRAY, OBJECT, XMLSTRING, BYTEARRAY = range(0x0d)
     ANONYMOUS, TYPED, DYNAMIC, EXTERNALIZABLE = 0x01, 0x02, 0x04, 0x08
-    
+
     def __init__(self, data=None):
         self._obj_refs, self._str_refs, self._class_refs = list(), list(), list()
         self.data = data if isinstance(data, BytesIO) else BytesIO(data) if data is not None else BytesIO()
@@ -220,7 +292,7 @@ class AMF3(object):
         elif type == AMF3.XMLSTRING:  return self.readXMLString()
         elif type == AMF3.BYTEARRAY:  return self.readByteArray()
         else: raise ValueError('Invalid AMF3 type 0x%02x at %d' % (type, self.data.tell()-1))
-    
+
     def write(self, data):
         global undefined
         if data is None:              self.data.write_u8(AMF3.NULL)
@@ -235,11 +307,11 @@ class AMF3(object):
         elif isinstance(data, (types.InstanceType, Object)): self.writeObject(data)
         # no implicit way to invoke writeXMLString and writeByteArray
         else: raise ValueError('Invalid AMF3 data %r type %r'%(data, type(data)))
-    
+
     def _readLengthRef(self):
         val = self.data.read_u29()
         return (val >> 1, val & 0x01 == 0)
-    
+
     def readInteger(self, signed=True):
         self.data.read_u29() if not signed else self.data.read_s29()
     def writeNumber(self, data, writeType=True, type=None):
@@ -247,7 +319,7 @@ class AMF3(object):
         if writeType: self.data.write_u8(type)
         if type == AMF3.INTEGER: self.data.write_s29(data)
         else: self.data.write_double(float(data))
-    
+
     def readString(self, refs=None, decode=True):
         length, is_reference = self._readLengthRef()
         if refs is None: refs = self._str_refs
@@ -267,11 +339,11 @@ class AMF3(object):
             if encode and type(data) is unicode: data = unicode(data).encode('utf8')
             self.data.write_u29((len(data) << 1) & 0x01)
             self.data.write(data)
-        
+
     def _writePossibleReference(self, data, refs):
         if data in refs: self.data.write_u29(refs.index(data) << 1); return True
         elif len(refs) < 0x1ffffffe: refs.append(data)
-    
+
     # Ported from http://viewvc.rubyforge.mmmultiworks.com/cgi/viewvc.cgi/trunk/lib/ruva/class.rb
     # Ruby version is Copyright (c) 2006 Ross Bamford (rosco AT roscopeco DOT co DOT uk). The string is first converted to UTF16 BE
     @staticmethod
@@ -281,7 +353,7 @@ class AMF3(object):
             c = b[i:i+1] if b[i] & 0x80 == 0 else b[i:i+2] if b[i] & 0xc0 == 0xc0 else b[i:i+3] if b[i] & 0xe0 == 0xe0 else b[i:i+4] if b[i] & 0xf8 == 0xf8 else []
             if len(c) == 0: raise ValueError('invalid modified utf-8')
             utf16.append(c[0] if len(c) == 1 else (((c[0] & 0x1f) << 6) | (c[1] & 0x3f)) if len(c) == 2 else (((c[0] & 0x0f) << 12) | ((c[1] & 0x3f) << 6) | (c[2] & 0x3f)) if len(c) == 3 else (((c[0] & 0x07) << 18) | ((c[1] & 0x3f) << 12) | ((c[2] & 0x3f) << 6) | (c[3] & 0x3f)) if len(c) == 4 else -1)
-        for c in utf16: 
+        for c in utf16:
             if c > 0xffff: raise ValueError('does not implement more than 16 bit unicode')
         return unicode(''.join([chr((c >> 8) & 0xff) + chr(c & 0xff) for c in utf16]), 'utf_16_be')
     @staticmethod
@@ -290,7 +362,7 @@ class AMF3(object):
         utf16 = [(((ch[i] & 0xff) << 8) + (ch[i+1] & 0xff)) for i in xrange(0, len(ch), 2)]
         b = [(struct.pack('>B', c) if c <= 0x7f else struct.pack('>BB', 0xc0 | (c >> 6) & 0x1f, 0x80 | c & 0x3f) if c <= 0x7ff else struct.pack('>BBB', 0xe0 | (c >> 12) & 0xf, 0x80 | (c >> 6) & 0x3f, 0x80 | c & 0x3f) if c <= 0xffff else struct.pack('!B', 0xf0 | (c >> 18) & 0x7, 0x80 | (c >> 12) & 0x3f, 0x80 | (c >> 6) & 0x3f, 0x80 | c & 0x3f) if c <= 0x10ffff else None) for c in utf16]
         return ''.join(b)
-        
+
     def readDate(self):
         length, is_reference = self._readLengthRef()
         if is_reference: return self._obj_refs[length]
@@ -306,7 +378,7 @@ class AMF3(object):
             ms = time.mktime(data.timetuple)
             self.data.write_u29(0x01)
             self.data.write_double(ms * 1000.0)
-    
+
     def readArray(self):
         length, is_reference = self._readLengthRef()
         if is_reference: return self._obj_refs[length]
@@ -342,9 +414,9 @@ class AMF3(object):
             for key in str_keys: self.writeString(str(key), writeType=False); self.write(data[key])
             self.data.write_u8(0x01)
             for key in int_keys: self.write(data[key])
-            
-    # (U29O-ref | (U29O-traits-ext class-name *(U8)) | U29O-traits-ref  | (U29O-traits class-name *(UTF-8-vr))) 
-    # *(value-type) *(dynamic-member))) 
+
+    # (U29O-ref | (U29O-traits-ext class-name *(U8)) | U29O-traits-ref  | (U29O-traits class-name *(UTF-8-vr)))
+    # *(value-type) *(dynamic-member)))
     def readObject(self):
         type, is_reference = self._readLengthRef()
         if is_reference: return self._obj_refs[type]
@@ -392,10 +464,10 @@ class AMF3(object):
                 self.data.write_u8(0x01)  # anonymous
                 for key, value in data.__dict__.items():
                     self.writeString(key, writeType=False)
-                    self.write(getattr(data, key)) 
-                self.data.write_u8(0x01) 
-    
-    
+                    self.write(getattr(data, key))
+                self.data.write_u8(0x01)
+
+
     def readXML(self):
         return ET.fromstring(self.readString(refs=self._obj_refs))
     def writeXML(self, data):
@@ -407,7 +479,7 @@ class AMF3(object):
     def writeXMLString(self, data): # not implicitly invoked by write()
         self.data.write_u8(AMF3.XMLSTRING)
         self.writeString(data, writeType=False, refs=self._obj_refs)
-    
+
     def readByteArray(self):
         return self.readString(refs=self._obj_refs, decode=False)
     def writeByteArray(self, data): # not implicitly invoked by write()
@@ -418,10 +490,10 @@ class AMF3(object):
 # The source in this file has been re-written based on Adobe's AMF0/AMF3 spec.
 #
 # Copyright (c) 2007 The RTMPy Project. All rights reserved.
-# 
+#
 # Arnar Birgisson
 # Thijs Triemstra
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
 # "Software"), to deal in the Software without restriction, including
@@ -429,10 +501,10 @@ class AMF3(object):
 # distribute, sublicense, and/or sell copies of the Software, and to
 # permit persons to whom the Software is furnished to do so, subject to
 # the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 # EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 # MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND

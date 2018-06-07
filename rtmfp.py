@@ -428,7 +428,7 @@ Describe the man-in-middle mode that enables audio/video flowing through the ser
 '''
 
 import sys
-import traceback
+import itertools
 import urlparse
 import re
 import socket
@@ -604,7 +604,7 @@ _bin2hex = lambda data: ''.join(['%02x'%(ord(x),) for x in data])
 
 def _checkSum(data):
     data, last = (data[:-1], ord(data[-1])) if len(data) % 2 != 0 else (data, 0)
-    cs = reduce(lambda x,y: x+y, [(ord(x) << 8 | ord(y)) for x, y in zip(data[::2], data[1::2])], 0) + last
+    cs = reduce(lambda x,y: x+y, ((ord(x) << 8 | ord(y)) for x, y in itertools.izip(data[::2], data[1::2])), 0) + last
     cs = (cs >> 16) + (cs & 0xffff)
     cs += (cs >> 16)
     return (~cs) & 0xffff
